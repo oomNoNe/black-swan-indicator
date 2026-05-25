@@ -76,6 +76,57 @@ The first run downloads the FinBERT model (~440 MB). Subsequent runs are cached.
 
 ---
 
+## 🎓 Why These Models?
+
+### 🤖 FinBERT (for Sentiment Analysis)
+
+**Rationale**: Pre-trained on financial corpora — understands jargon that general
+language models miss (e.g., "bearish guidance", "hawkish Fed", "deleveraging").
+
+| ✅ Pros | ❌ Cons |
+|---|---|
+| ~15% more accurate than vanilla BERT on financial text | English only |
+| Open-source, free (ProsusAI) | Trained 2019 — doesn't know new jargon |
+| CPU-friendly inference | ~440MB memory footprint |
+| Pre-trained on Reuters TRC2 | Possible bias from training data |
+
+**Alternatives considered**: GPT-4 (too expensive, latency), generic BERT (no
+domain context), VADER (rule-based, not ML).
+
+### 🌲 XGBoost (for VIX Forecasting)
+
+**Rationale**: Best-in-class for tabular data, which is what our macro lag
+features look like. Battle-tested in Kaggle and used by major hedge funds.
+
+| ✅ Pros | ❌ Cons |
+|---|---|
+| Industry-proven (Kaggle, quant funds) | No temporal memory — manual lag features needed |
+| Extremely fast (< 1s training) | Easy to overfit without tuning |
+| Interpretable via feature importance | Poor extrapolation |
+| Handles missing values natively | Outperformed by deep learning on huge datasets |
+| No feature scaling required | |
+
+**Alternatives considered**: Linear regression (misses non-linearity), LSTM
+(data-hungry, slow, opaque), ARIMA (assumes linearity/stationarity), Transformer
+(overkill for 5 features).
+
+### 📊 SMA + Rolling Vol (for Regime Detection)
+
+**Rationale**: Simple, transparent, and used as a standard by major funds
+(Bridgewater, Two Sigma). No ML required — Occam's Razor applied.
+
+| ✅ Pros | ❌ Cons |
+|---|---|
+| Transparent — not a black box | **Lagging indicator** — SMA-200 reacts slowly |
+| No hyperparameter tuning | Binary thresholds miss transitions |
+| Fast computation | Doesn't use macro/news data |
+| Industry standard | |
+
+**Future alternatives**: Hidden Markov Model (smoother transitions),
+Bayesian regime switching (probabilistic), GMM clustering (unsupervised).
+
+---
+
 ## 📊 Methodology Notes
 
 - **Time-series split** (`shuffle=False`) for XGBoost training — no look-ahead leakage.

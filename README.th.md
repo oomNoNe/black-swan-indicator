@@ -99,6 +99,63 @@ streamlit run app.py
 
 ---
 
+## 🎓 ทำไมเลือกโมเดลเหล่านี้?
+
+### 🤖 FinBERT (สำหรับ Sentiment Analysis)
+
+**ทำไมเลือก**: ฝึกบน corpus การเงินโดยเฉพาะ — เข้าใจศัพท์ที่โมเดลทั่วไปอ่านไม่ออก
+เช่น "bearish guidance", "hawkish Fed", "deleveraging"
+
+| ✅ ข้อดี | ❌ ข้อเสีย |
+|---|---|
+| แม่นกว่า BERT ทั่วไป ~15% สำหรับข่าวการเงิน | รองรับแค่ภาษาอังกฤษ |
+| Open-source ฟรี (ProsusAI) | ฝึกปี 2019 — ไม่รู้ศัพท์ใหม่ (GameStop, AI bubble) |
+| เร็วพอใช้บน CPU | ใช้ RAM ~440MB |
+| Pre-trained บน Reuters TRC2 | อาจ bias จาก training data |
+
+**ทางเลือกที่พิจารณาแต่ไม่เลือก**:
+- ❌ GPT-4 API → แพง, ต้อง API key, latency สูง
+- ❌ Generic BERT → ไม่เข้าใจบริบทการเงิน
+- ❌ VADER → rule-based, ไม่ใช่ ML
+
+### 🌲 XGBoost (สำหรับพยากรณ์ VIX)
+
+**ทำไมเลือก**: เก่งกับข้อมูลแบบตาราง (tabular) ซึ่งเป็นรูปแบบของ macro features
+ของเรา (VIX lag, returns) — และชนะ Kaggle competitions มากที่สุด
+
+| ✅ ข้อดี | ❌ ข้อเสีย |
+|---|---|
+| Industry-proven (Kaggle, hedge funds) | ไม่มี memory ของเวลา → ต้องสร้าง lag features เอง |
+| เร็วมาก (เทรน < 1 วินาที) | Overfit ง่ายถ้าไม่ tune |
+| ตีความได้ผ่าน feature importance | ไม่เก่ง extrapolation |
+| ทนต่อ missing values | แพ้ deep learning บนข้อมูลใหญ่มากๆ |
+| ไม่ต้อง scale features | |
+
+**ทางเลือกที่พิจารณาแต่ไม่เลือก**:
+- ❌ Linear Regression → ไม่จับ non-linearity
+- ❌ LSTM → ต้องการข้อมูลเยอะกว่า, เทรนนาน, ตีความยาก
+- ❌ ARIMA → assume linear & stationary (VIX ไม่ใช่)
+- ❌ Transformer → overkill สำหรับ 5 features
+
+### 📊 SMA + Rolling Vol (สำหรับ Regime Detection)
+
+**ทำไมเลือก**: เรียบง่าย ตีความได้ทันที — ทุกกองทุนใหญ่ใช้ตัวนี้เป็นมาตรฐาน
+(Bridgewater, Two Sigma) ไม่ต้องการ ML ก็ใช้งานได้
+
+| ✅ ข้อดี | ❌ ข้อเสีย |
+|---|---|
+| เข้าใจง่าย ไม่ใช่ black box | **Lagging indicator** — SMA-200 ตอบสนองช้า |
+| ไม่ต้อง tune hyperparameter | Binary thresholds — อาจพลาดช่วง transition |
+| คำนวณเร็ว | ไม่ใช้ข้อมูล macro/news |
+| Industry standard | |
+
+**ทางเลือกที่พิจารณาแต่ไม่เลือก** (พร้อม implement ในอนาคต):
+- 🔄 **Hidden Markov Model (HMM)** → จับ transition ระหว่าง regime ได้นุ่มนวลกว่า
+- 🔄 **Bayesian regime switching** → ให้ probability แทน binary
+- 🔄 **GMM clustering** → ไม่ต้องนิยาม regime ก่อน
+
+---
+
 ## 📊 หลักการและ Methodology
 
 ### Time-Series Validation
