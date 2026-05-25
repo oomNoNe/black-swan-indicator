@@ -15,6 +15,8 @@ class VIXForecaster:
             max_depth=4
         )
         self.is_trained = False
+        self.train_score = None
+        self.test_score = None
 
     def build_features(self, df):
         """สร้าง Lag Features ทางเศรษฐศาสตร์เพื่อป้อนให้โมเดล"""
@@ -48,9 +50,9 @@ class VIXForecaster:
             self.model.fit(X_train, y_train)
             self.is_trained = True
 
-            # (ทางเลือกเพิ่มเติม) คืนค่าความแม่นยำสำหรับการดีบัก
-            score = self.model.score(X_test, y_test)
-            return {"status": "success", "r2_score": score}
+            self.train_score = float(self.model.score(X_train, y_train))
+            self.test_score = float(self.model.score(X_test, y_test))
+            return {"status": "success", "r2_score": self.test_score}
 
         except Exception as e:
             print(f"[ML Training Error] XGBoost compilation failed: {e}")
@@ -67,7 +69,7 @@ class VIXForecaster:
             X_pred = df_features[['VIX_Lag1', 'VIX_Lag3', 'VIX_Lag7', 'SP500_Return_1D', 'SP500_Return_5D']]
 
             prediction = self.model.predict(X_pred)[0]
-            return round(prediction, 2)
+            return float(round(float(prediction), 2))
         except Exception as e:
             print(f"[ML Prediction Error] Failed to forecast VIX: {e}")
             return np.nan
