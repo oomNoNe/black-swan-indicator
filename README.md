@@ -1,5 +1,7 @@
 # 🚨 Black Swan Risk Indicator (Quant Edition)
 
+> 🌐 **Languages:** **English** | [ภาษาไทย](README.th.md)
+
 AI-powered & Quant-driven early warning system for financial crises.
 Combines **NLP sentiment analysis**, **macro volatility forecasting**, and **regime detection**
 to produce a single Crisis Risk Score (0–100) and a backtested trading strategy.
