@@ -214,16 +214,13 @@ pytest tests/ -v
 - [x] เพิ่ม **badges** (CI status, Python version, license)
 - [ ] เพิ่ม **screenshot** ใน README
 
-### Tier 2 — ยกระดับ ML / Quant
-- [ ] ใช้ **Walk-forward validation** แทน single train/test split
-- [ ] เพิ่ม features ใหม่:
-  - Yield curve inversion (10Y - 2Y spread)
-  - Credit spread (HY - IG)
-  - Gold, Oil, USD Index
-  - Put/Call ratio
-- [ ] เปลี่ยนเป็น **Classification problem** (crash vs no-crash) → ใช้ Precision/Recall/F1
-- [ ] เพิ่ม **SHAP** อธิบายการตัดสินใจของโมเดล (Interpretable AI)
-- [ ] เพิ่ม **Transaction cost** (~0.05-0.10% per turnover) ในการ backtest
+### Tier 2 — ยกระดับ ML / Quant ✅ ทำเสร็จแล้ว
+- [x] ใช้ **Walk-forward validation** (TimeSeriesSplit) แทน train/test split ธรรมดา
+- [x] เพิ่ม **macro features**: yield curve spread, Gold, Oil, DXY (5 → 13 features)
+- [x] **Classification mode**: crash vs no-crash + Precision/Recall/F1/ROC-AUC
+- [x] **SHAP** feature importance (Interpretable AI)
+- [x] **Transaction cost** ใน backtest (0-50 bps ปรับได้)
+- [x] **Model comparison**: XGBoost vs LightGBM vs Ridge/LogReg (LSTM เลื่อนไป Tier 3)
 
 ### Tier 3 — Production-Grade
 - [ ] Batch pipeline ด้วย **Airflow / Prefect** + เก็บข้อมูลลง **PostgreSQL / DuckDB**

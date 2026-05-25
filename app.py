@@ -10,16 +10,22 @@ from datetime import datetime
 # ---------------------------------------------------------
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
-from data.market_crawler import get_current_vix, fetch_historical_data
+from data.market_crawler import get_current_vix, fetch_historical_data, fetch_macro_data
 from data.news_crawler import fetch_financial_news
 from engine.ai_model import SentimentAnalyzer
 from engine.backtester import run_advanced_backtest, calculate_professional_metrics
 from engine.regime_detector import classify_market_regime, dynamic_risk_equation
-from engine.ml_predictor import VIXForecaster
+from engine.ml_predictor import (
+    VIXForecaster, CrashClassifier,
+    walk_forward_validate, compare_models, compute_shap_values,
+)
+from engine.features import build_features
 from ui.components import (
     draw_gauge_chart, color_sentiment, draw_backtest_chart,
     draw_vix_history_chart, draw_feature_importance,
     draw_equity_curve_chart, draw_drawdown_chart, draw_sentiment_donut,
+    draw_walkforward_chart, draw_model_comparison,
+    draw_shap_summary, draw_crash_probability_gauge,
 )
 
 # ==========================================================
@@ -153,12 +159,27 @@ def load_historical_data(years=5):
     return fetch_historical_data(years=years)
 
 
+@st.cache_data(ttl=3600)
+def load_macro_data(years=5):
+    """Tier 2: ดึงข้อมูล macro เพิ่ม (yield curve, gold, oil, DXY)"""
+    return fetch_macro_data(years=years)
+
+
 @st.cache_resource
 def load_ml_predictor(_historical_df):
     forecaster = VIXForecaster()
     if _historical_df is not None and not _historical_df.empty:
         forecaster.train_model(_historical_df)
     return forecaster
+
+
+@st.cache_resource
+def load_crash_classifier(_macro_df, crash_threshold):
+    """Tier 2: classification model สำหรับทำนายโอกาส crash"""
+    clf = CrashClassifier("XGBoost", crash_threshold_pct=crash_threshold)
+    if _macro_df is not None and not _macro_df.empty:
+        clf.train(_macro_df)
+    return clf
 
 
 # ==========================================================
@@ -184,6 +205,24 @@ with st.sidebar:
         "Vol Spike Multiplier",
         min_value=1.0, max_value=3.0, value=1.5, step=0.1,
         help="ค่า volatility 20 วัน ต้องสูงกว่ามัธยฐาน 252 วัน กี่เท่า ถึงจะถือว่าผิดปกติ"
+    )
+    transaction_cost_bps = st.slider(
+        "Transaction Cost (bps)",
+        min_value=0, max_value=50, value=10, step=5,
+        help="ต้นทุนต่อการเทรด 1 ครั้ง | 0 = ไม่คิด, 10 = 0.10% (typical retail), 25 = 0.25% (high-cost)"
+    )
+
+    st.divider()
+    st.subheader("🔬 Model Lab")
+    crash_threshold = st.slider(
+        "Crash Threshold (%)",
+        min_value=10, max_value=50, value=20, step=5,
+        help="ถือว่าเป็น crash ถ้า VIX เพิ่มขึ้นเกินกี่ % ใน 7 วัน"
+    )
+    wf_splits = st.slider(
+        "Walk-Forward Folds",
+        min_value=3, max_value=10, value=5, step=1,
+        help="จำนวน fold ใน TimeSeriesSplit | มากขึ้น = test แต่ละ fold เล็กลง"
     )
 
     st.divider()
@@ -216,7 +255,9 @@ with st.sidebar:
 with st.spinner("⏳ กำลังโหลดข้อมูลตลาด + เทรนโมเดล AI..."):
     sentiment_ai = load_sentiment_ai()
     hist_data = load_historical_data(years=years_lookback)
+    macro_data = load_macro_data(years=years_lookback)
     ml_forecaster = load_ml_predictor(hist_data)
+    crash_classifier = load_crash_classifier(macro_data, crash_threshold)
 
 
 # ==========================================================
@@ -285,10 +326,11 @@ st.divider()
 # ==========================================================
 # TABS
 # ==========================================================
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Live Risk Dashboard",
     "🤖 AI Regime & Prediction",
     "📈 Advanced Quant Backtest",
+    "🔬 Model Lab (Tier 2)",
 ])
 
 # ==========================================
@@ -607,10 +649,17 @@ with tab3:
         n_signals = int(bt_data['Risk_Signal'].sum())
         pct_in_cash = (n_signals / len(bt_data)) * 100
 
-        metrics = run_advanced_backtest(bt_data)
+        metrics = run_advanced_backtest(bt_data, transaction_cost_bps=transaction_cost_bps)
 
         if metrics:
             st.markdown("#### 📊 ผลการ Backtest")
+            if transaction_cost_bps > 0:
+                ts = metrics.get("Trading_Stats", {})
+                st.info(
+                    f"💰 รวมค่าธรรมเนียมเทรด **{transaction_cost_bps} bps** ต่อครั้ง — "
+                    f"เทรดทั้งหมด {ts.get('Number of Trades', 0)} ครั้ง, "
+                    f"ต้นทุนสะสม {ts.get('Total Cost (% of capital)', 0):.2f}% ของทุน"
+                )
 
             strat = metrics["Black_Swan_Strategy"]
             base = metrics["Baseline_Buy_Hold"]
@@ -699,3 +748,165 @@ with tab3:
             st.warning("คำนวณ backtest metrics ไม่ได้ — ข้อมูลอาจไม่เพียงพอ")
     else:
         st.error("ข้อมูลย้อนหลังไม่พร้อม — ตรวจสอบการเชื่อมต่อ yfinance")
+
+# ==========================================
+# TAB 4: Model Lab (Tier 2)
+# ==========================================
+with tab4:
+    st.subheader("🔬 Model Lab — Walk-Forward Validation + Model Comparison + SHAP")
+    st.caption(
+        "Showcase ฟีเจอร์ขั้นสูงของ Tier 2 — เปรียบเทียบโมเดลด้วยวิธีที่ Quant ใช้จริง"
+    )
+
+    if macro_data is None or macro_data.empty:
+        st.error("ไม่สามารถโหลด macro data ได้ — ตรวจสอบการเชื่อมต่อ yfinance")
+    else:
+        st.success(
+            f"✅ โหลด macro features สำเร็จ: {len(macro_data)} วัน × "
+            f"{len(macro_data.columns)} ตัวชี้วัด (S&P, VIX, Treasury yields, Gold, Oil, DXY)"
+        )
+
+        # ============================================
+        # Section 1: Crash Probability (Classification)
+        # ============================================
+        st.markdown("### 🚨 Section 1: Crash Probability Forecast")
+        st.caption("Binary classification: VIX จะ spike เกิน threshold ใน 7 วันข้างหน้ามั้ย?")
+
+        if crash_classifier.is_trained:
+            prob = crash_classifier.predict_crash_probability(macro_data)
+            metrics = crash_classifier.metrics or {}
+
+            c1, c2 = st.columns([1, 2])
+            with c1:
+                st.plotly_chart(draw_crash_probability_gauge(prob), use_container_width=True)
+            with c2:
+                st.markdown(f"##### โมเดล Performance (test set, threshold = {crash_threshold}%)")
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Accuracy", f"{metrics.get('Accuracy', 0)*100:.1f}%",
+                          help="% การทำนายที่ถูก — แต่ misleading ถ้า base rate ต่ำ")
+                m2.metric("Precision", f"{metrics.get('Precision', 0)*100:.1f}%",
+                          help="ถ้าโมเดลบอก 'จะ crash' มันถูกกี่ %")
+                m3.metric("Recall", f"{metrics.get('Recall', 0)*100:.1f}%",
+                          help="crash จริงๆ มีกี่ % ที่โมเดลจับได้")
+                m4.metric("F1 Score", f"{metrics.get('F1', 0):.3f}",
+                          help="harmonic mean ของ Precision + Recall (สำคัญสุดเมื่อ class imbalanced)")
+                st.caption(
+                    f"📊 Base rate (crash actual): {metrics.get('Base Rate (crash %)', 0):.1f}% "
+                    "→ โมเดลควรทำได้ดีกว่า random ที่ accuracy = 1 - base_rate"
+                )
+
+        st.divider()
+
+        # ============================================
+        # Section 2: Walk-Forward Validation
+        # ============================================
+        st.markdown("### 📈 Section 2: Walk-Forward Validation (Time-Series CV)")
+        with st.expander("📖 Walk-Forward คืออะไร? ทำไมต้องใช้?", expanded=False):
+            st.markdown(
+                """
+                **ปัญหาของ train/test split ปกติ**: ตอน shuffle ข้อมูล time-series →
+                โมเดลอาจเห็นอนาคต (look-ahead bias) → R² ดูดีเกินจริง
+
+                **Walk-forward** = เทรนบนช่วงเวลา 1 → test ช่วง 2 → เทรน 1+2 → test 3 → ...
+                เลียนแบบการใช้งานจริง (ทำนายอนาคตจากข้อมูลเฉพาะที่มีตอนนั้น)
+
+                **ตัวเลขที่ได้** = mean ± std ของ R² ใน {n} folds → สะท้อนผลจริงในการใช้งาน
+                """.format(n=wf_splits)
+            )
+
+        with st.spinner("⏳ กำลังรัน walk-forward (อาจใช้เวลา 5-10 วินาที)..."):
+            wf_result = walk_forward_validate(
+                macro_data, model_name="XGBoost", task="regression", n_splits=wf_splits
+            )
+
+        wfm1, wfm2, wfm3 = st.columns(3)
+        wfm1.metric("Mean R²", f"{wf_result['mean_score']:.3f}",
+                    help="R² เฉลี่ยจากทุก fold | ติดลบ = แย่กว่าเดาค่าเฉลี่ย (VIX ยากมาก)")
+        wfm2.metric("Std R²", f"{wf_result['std_score']:.3f}",
+                    help="ความแปรปรวนของ performance ระหว่าง fold | สูง = ไม่เสถียร")
+        wfm3.metric("Number of Folds", wf_splits)
+
+        st.plotly_chart(
+            draw_walkforward_chart(wf_result["predictions_df"], task="regression"),
+            use_container_width=True
+        )
+        st.caption(
+            "💡 แต่ละ fold มีแถบสีพื้นหลังแยก | เส้นน้ำเงิน = ค่าจริง, ส้มประ = โมเดลทำนาย | "
+            "ถ้าเส้นใกล้กัน = โมเดลแม่น"
+        )
+
+        st.divider()
+
+        # ============================================
+        # Section 3: Model Comparison
+        # ============================================
+        st.markdown("### ⚔️ Section 3: Model Comparison")
+        st.caption("เทียบ 3 โมเดลด้วย walk-forward validation พร้อมกัน — ใครชนะใน task ไหน?")
+
+        cmp_col1, cmp_col2 = st.columns(2)
+
+        with cmp_col1:
+            st.markdown("##### 📈 Regression (predict VIX level)")
+            with st.spinner("เทียบโมเดล regression..."):
+                cmp_reg = compare_models(macro_data, task="regression", n_splits=wf_splits)
+            fig_reg = draw_model_comparison(cmp_reg)
+            if fig_reg:
+                st.plotly_chart(fig_reg, use_container_width=True)
+            st.dataframe(cmp_reg, use_container_width=True, hide_index=True)
+
+        with cmp_col2:
+            st.markdown("##### 🎯 Classification (crash vs no-crash)")
+            with st.spinner("เทียบโมเดล classification..."):
+                cmp_cls = compare_models(
+                    macro_data, task="classification", n_splits=wf_splits,
+                    classification_kwargs={"crash_threshold_pct": crash_threshold}
+                )
+            fig_cls = draw_model_comparison(cmp_cls)
+            if fig_cls:
+                st.plotly_chart(fig_cls, use_container_width=True)
+            st.dataframe(cmp_cls, use_container_width=True, hide_index=True)
+
+        with st.expander("🧠 ตีความผลเทียบโมเดล", expanded=False):
+            st.markdown(
+                """
+                **ทำไม Ridge / LogReg บางทีชนะ XGBoost?**
+                - ข้อมูลเรามีแค่ ~1,200 วัน (5 ปี) — เล็กมากสำหรับ tree models
+                - Tree models ต้องการข้อมูลเยอะกว่าจึงจะไม่ overfit
+                - VIX เป็น noisy signal — linear models robust กว่ากับ noise
+                - **บทเรียน**: ไม่ใช่ทุก problem ต้องใช้ deep learning! เริ่มจาก baseline ง่ายๆ ก่อน
+
+                **ทำไม F1 ต่ำใน classification?**
+                - Crash เป็น rare event (base rate ~10-15%) → class imbalance
+                - โมเดล default เลือก "no crash" เกือบทุกครั้ง → recall ต่ำ
+                - แก้: ใช้ `class_weight='balanced'` (ทำใน LogReg แล้ว) หรือ SMOTE
+                """
+            )
+
+        st.divider()
+
+        # ============================================
+        # Section 4: SHAP Feature Importance
+        # ============================================
+        st.markdown("### 🔍 Section 4: SHAP Feature Importance (Explainable AI)")
+        st.caption(
+            "SHAP บอกว่าแต่ละ feature 'ผลักดัน' การทำนายไปทางไหน — เห็นชัดกว่า feature_importance ปกติ"
+        )
+
+        with st.spinner("⏳ คำนวณ SHAP values..."):
+            try:
+                clean_df, feat_cols, _ = build_features(macro_data, classification=False)
+                shap_values, feature_names, X_sample = compute_shap_values(
+                    ml_forecaster.model, clean_df[feat_cols]
+                )
+                if shap_values is not None:
+                    fig_shap = draw_shap_summary(shap_values, feature_names, X_sample)
+                    st.plotly_chart(fig_shap, use_container_width=True)
+                    st.caption(
+                        "📊 แท่งยาว = feature นั้นมีผลต่อการทำนายมาก | "
+                        "**แตกต่างจาก XGBoost feature_importance ตรงที่** SHAP คำนวณจาก Shapley values ใน game theory → "
+                        "fair & consistent ระหว่าง features"
+                    )
+                else:
+                    st.warning("ไม่สามารถคำนวณ SHAP values ได้")
+            except Exception as e:
+                st.error(f"SHAP error: {e}")

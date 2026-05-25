@@ -207,6 +207,140 @@ def draw_drawdown_chart(df):
 
 
 # ==========================================================
+# WALK-FORWARD VALIDATION CHART
+# ==========================================================
+def draw_walkforward_chart(predictions_df, task="regression"):
+    """แสดงผล walk-forward validation: actual vs predicted ต่อ fold"""
+    if predictions_df is None or predictions_df.empty:
+        return None
+
+    fig = go.Figure()
+
+    # Actual values (สีฟ้า)
+    fig.add_trace(go.Scatter(
+        x=predictions_df['date'], y=predictions_df['actual'],
+        mode='lines', name='Actual',
+        line=dict(color='#1f77b4', width=2)
+    ))
+
+    # Predicted values (สีส้ม)
+    fig.add_trace(go.Scatter(
+        x=predictions_df['date'], y=predictions_df['predicted'],
+        mode='lines', name='Predicted',
+        line=dict(color='#FFA15A', width=2, dash='dot')
+    ))
+
+    # แบ่งสีพื้นหลังตาม fold
+    n_folds = predictions_df['fold'].nunique()
+    colors = px.colors.qualitative.Pastel
+    for fold in sorted(predictions_df['fold'].unique()):
+        fold_data = predictions_df[predictions_df['fold'] == fold]
+        if not fold_data.empty:
+            fig.add_vrect(
+                x0=fold_data['date'].min(), x1=fold_data['date'].max(),
+                fillcolor=colors[fold % len(colors)], opacity=0.08,
+                layer="below", line_width=0,
+                annotation_text=f"Fold {fold}", annotation_position="top left",
+                annotation_font_size=10,
+            )
+
+    title = "Walk-Forward Validation: Actual vs Predicted"
+    y_label = "VIX Level" if task == "regression" else "Crash Label (0/1)"
+
+    fig.update_layout(
+        title=title, xaxis_title="Date", yaxis_title=y_label,
+        template="plotly_dark", hovermode="x unified", height=400,
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+    )
+    return fig
+
+
+# ==========================================================
+# MODEL COMPARISON BAR CHART
+# ==========================================================
+def draw_model_comparison(comparison_df):
+    """แสดงผลเปรียบเทียบโมเดลแบบ horizontal bar with error bars"""
+    if comparison_df is None or comparison_df.empty:
+        return None
+
+    df = comparison_df.dropna(subset=['Mean Score']).sort_values('Mean Score')
+    if df.empty:
+        return None
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=df['Mean Score'], y=df['Model'], orientation='h',
+        error_x=dict(type='data', array=df['Std Score'], color='white'),
+        marker=dict(color=df['Mean Score'], colorscale='Viridis', showscale=False),
+        text=[f"{v:.3f} ± {s:.3f}" for v, s in zip(df['Mean Score'], df['Std Score'])],
+        textposition='outside',
+    ))
+    metric = df['Metric'].iloc[0] if 'Metric' in df.columns else "Score"
+    fig.update_layout(
+        title=f"Model Comparison ({metric}, walk-forward CV)",
+        xaxis_title=f"Mean {metric} (± std across folds)",
+        yaxis_title="",
+        template="plotly_dark", height=320,
+        margin=dict(l=20, r=80, t=50, b=40)
+    )
+    return fig
+
+
+# ==========================================================
+# SHAP SUMMARY (BEESWARM-LIKE simplified)
+# ==========================================================
+def draw_shap_summary(shap_values, feature_names, X_sample):
+    """SHAP feature importance — แบบเรียงตามค่า mean(|SHAP|)"""
+    if shap_values is None or feature_names is None:
+        return None
+
+    # คำนวณค่าสำคัญเฉลี่ย
+    mean_abs_shap = np.abs(shap_values).mean(axis=0)
+    order = np.argsort(mean_abs_shap)
+    features_sorted = [feature_names[i] for i in order]
+    importance_sorted = mean_abs_shap[order]
+
+    fig = go.Figure(go.Bar(
+        x=importance_sorted, y=features_sorted, orientation='h',
+        marker=dict(color=importance_sorted, colorscale='Plasma', showscale=False),
+        text=[f"{v:.3f}" for v in importance_sorted], textposition='outside',
+    ))
+    fig.update_layout(
+        title="SHAP Feature Importance (mean |SHAP value|)",
+        xaxis_title="Mean Absolute SHAP Value", yaxis_title="",
+        template="plotly_dark", height=400,
+        margin=dict(l=20, r=60, t=50, b=40)
+    )
+    return fig
+
+
+# ==========================================================
+# CRASH PROBABILITY GAUGE
+# ==========================================================
+def draw_crash_probability_gauge(probability):
+    """หน้าปัดแสดงโอกาสเกิด crash"""
+    prob_pct = probability * 100 if probability is not None else 0
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=prob_pct,
+        number={'suffix': "%", 'font': {'size': 36}},
+        domain={'x': [0, 1], 'y': [0, 1]},
+        title={'text': "<b>Crash Probability (7d)</b>", 'font': {'size': 16}},
+        gauge={
+            'axis': {'range': [None, 100], 'tickwidth': 1},
+            'bar': {'color': "black"},
+            'steps': [
+                {'range': [0, 30], 'color': "#00cc96"},
+                {'range': [30, 60], 'color': "#FFA15A"},
+                {'range': [60, 100], 'color': "#EF553B"}
+            ],
+        }
+    ))
+    fig.update_layout(height=260, margin=dict(l=20, r=20, t=40, b=20), template="plotly_dark")
+    return fig
+
+
+# ==========================================================
 # SENTIMENT DISTRIBUTION DONUT
 # ==========================================================
 def draw_sentiment_donut(news_df):

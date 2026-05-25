@@ -169,13 +169,13 @@ Bayesian regime switching (probabilistic), GMM clustering (unsupervised).
 - [x] CI/license/Python badges
 - [ ] Streamlit Cloud live demo URL
 
-**Tier 2 — ML/Quant Upgrades**
-- [ ] Walk-forward validation instead of single train/test split
-- [ ] Add features: yield curve, credit spread, gold/oil, USD index
-- [ ] Switch to classification (crash vs. no-crash) with Precision/Recall/F1
-- [ ] SHAP feature importance overlay
-- [ ] Transaction cost in backtest (~0.05-0.10% per trade)
-- [ ] Model comparison: XGBoost vs LightGBM vs LSTM
+**Tier 2 — ML/Quant Upgrades** ✅ DONE
+- [x] Walk-forward validation (TimeSeriesSplit) replacing single train/test
+- [x] Macro features: yield curve spread, Gold, Oil, DXY (5 → 13 features)
+- [x] Classification mode: crash vs no-crash + Precision/Recall/F1/ROC-AUC
+- [x] SHAP feature importance (interpretable AI)
+- [x] Transaction cost in backtest (configurable, 0-50 bps)
+- [x] Model comparison: XGBoost vs LightGBM vs Ridge/LogReg (LSTM in Tier 3)
 
 **Tier 3 — Production**
 - [ ] Batch pipeline (Airflow/Prefect) → PostgreSQL/DuckDB
