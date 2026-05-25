@@ -1,0 +1,78 @@
+{
+  // ============================================================
+  // Python interpreter — ใช้ venv ใน parent folder
+  // ============================================================
+  "python.defaultInterpreterPath": "${workspaceFolder}/../.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+
+  // ============================================================
+  // Pylance — autocomplete + type checking
+  // ============================================================
+  "python.languageServer": "Pylance",
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.indexing": true,
+  "python.analysis.userFileIndexingLimit": 2000,
+
+  // ============================================================
+  // Performance — ไม่ให้ VS Code/Pylance index ของหนัก
+  // นี่คือเหตุผลหลักที่ VS Code เร็วกว่า PyCharm ในงานนี้
+  // ============================================================
+  "python.analysis.exclude": [
+    "**/.venv",
+    "**/__pycache__",
+    "**/mlruns",
+    "**/mlartifacts",
+    "**/.pytest_cache",
+    "**/node_modules"
+  ],
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/mlruns": true,
+    "**/mlartifacts": true,
+    "**/*.pyc": true
+  },
+  "files.watcherExclude": {
+    "**/.venv/**": true,
+    "**/__pycache__/**": true,
+    "**/mlruns/**": true,
+    "**/.git/objects/**": true
+  },
+  "search.exclude": {
+    "**/.venv": true,
+    "**/__pycache__": true,
+    "**/mlruns": true,
+    "**/*.parquet": true
+  },
+
+  // ============================================================
+  // Editor — format on save + sensible defaults
+  // ============================================================
+  "editor.formatOnSave": false,
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "editor.rulers": [88, 120],
+  "editor.suggestSelection": "first",
+
+  // ============================================================
+  // Python testing — pytest integration
+  // ============================================================
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": ["tests"],
+
+  // ============================================================
+  // Terminal — ใช้ PowerShell บน Windows + activate venv อัตโนมัติ
+  // ============================================================
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.scrollback": 5000,
+
+  // ============================================================
+  // Streamlit — กันไม่ให้ Pylance หงุดหงิดกับ st.experimental_*
+  // ============================================================
+  "python.analysis.diagnosticSeverityOverrides": {
+    "reportMissingImports": "warning",
+    "reportGeneralTypeIssues": "information"
+  }
+}

@@ -9,9 +9,13 @@ __pycache__/
 venv/
 env/
 
-# IDE files (PyCharm, VSCode)
+# IDE files
 .idea/
-.vscode/
+
+# VS Code — เก็บ config (settings/extensions/launch/tasks) ใน repo
+# แต่กัน user-specific stuff ออก
+.vscode/*.log
+.vscode/.ropeproject/
 
 # Environment variables
 .env

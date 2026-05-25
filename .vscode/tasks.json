@@ -1,0 +1,47 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "🚀 Run Streamlit",
+      "type": "shell",
+      "command": "${workspaceFolder}/../.venv/Scripts/python.exe",
+      "args": ["-m", "streamlit", "run", "app.py"],
+      "group": {"kind": "build", "isDefault": true},
+      "presentation": {"reveal": "always", "panel": "new"},
+      "problemMatcher": []
+    },
+    {
+      "label": "🧪 Run Tests",
+      "type": "shell",
+      "command": "${workspaceFolder}/../.venv/Scripts/python.exe",
+      "args": ["-m", "pytest", "tests/", "-v"],
+      "group": {"kind": "test", "isDefault": true},
+      "presentation": {"reveal": "always", "panel": "shared"},
+      "problemMatcher": []
+    },
+    {
+      "label": "📦 Install Requirements",
+      "type": "shell",
+      "command": "${workspaceFolder}/../.venv/Scripts/python.exe",
+      "args": ["-m", "pip", "install", "-r", "requirements.txt"],
+      "presentation": {"reveal": "always", "panel": "new"},
+      "problemMatcher": []
+    },
+    {
+      "label": "📊 Open MLflow UI",
+      "type": "shell",
+      "command": "${workspaceFolder}/../.venv/Scripts/python.exe",
+      "args": ["-m", "mlflow", "ui", "--backend-store-uri", "./mlruns"],
+      "presentation": {"reveal": "always", "panel": "dedicated"},
+      "problemMatcher": []
+    },
+    {
+      "label": "🐳 Docker Build",
+      "type": "shell",
+      "command": "docker",
+      "args": ["build", "-t", "black-swan-indicator", "."],
+      "presentation": {"reveal": "always", "panel": "new"},
+      "problemMatcher": []
+    }
+  ]
+}
