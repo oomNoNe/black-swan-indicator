@@ -16,6 +16,9 @@ MLflow tracking URI ใช้ local file store (./mlruns/)
 import os
 from datetime import datetime
 from contextlib import contextmanager
+from typing import Optional
+
+import pandas as pd
 
 try:
     import mlflow
@@ -124,15 +127,24 @@ def log_model_comparison(comparison_df, task="regression"):
         return run.info.run_id
 
 
-def get_recent_runs(max_results=20):
-    """ดึง runs ล่าสุดสำหรับแสดงใน UI"""
+def get_recent_runs(max_results: int = 20) -> Optional[pd.DataFrame]:
+    """
+    ดึง runs ล่าสุดสำหรับแสดงใน UI
+
+    Returns:
+        DataFrame ของ runs (อาจเป็น empty) หรือ None ถ้า MLflow ไม่พร้อม
+    """
     if not _ensure_setup():
         return None
     try:
         runs = mlflow.search_runs(
             order_by=["start_time DESC"],
-            max_results=max_results
+            max_results=max_results,
+            output_format="pandas",  # บังคับ DataFrame เสมอ
         )
+        # ป้องกันเคส mlflow คืน list — แปลงเป็น DataFrame
+        if not isinstance(runs, pd.DataFrame):
+            return None
         return runs
     except Exception as e:
         print(f"[MLflow] Failed to load runs: {e}")

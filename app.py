@@ -1133,7 +1133,10 @@ with tab5:
                             n_splits=wf_splits, classification_kwargs=kwargs,
                         )
                         run_id = log_walkforward_result(res, run_name=f"{actual_model}_{log_task}_manual")
-                        st.success(f"✅ Logged! Run ID: `{run_id[:12]}...`")
+                        if run_id:
+                            st.success(f"✅ Logged! Run ID: `{run_id[:12]}...`")
+                        else:
+                            st.warning("⚠️ MLflow ไม่ได้ตั้งค่า — รัน `pip install mlflow` ก่อน")
                         st.caption(f"Mean {res['primary_metric']}: {res['mean_score']:.3f} ± {res['std_score']:.3f}")
                     except Exception as e:
                         st.error(f"Failed: {e}")
