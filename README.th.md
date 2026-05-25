@@ -222,12 +222,13 @@ pytest tests/ -v
 - [x] **Transaction cost** ใน backtest (0-50 bps ปรับได้)
 - [x] **Model comparison**: XGBoost vs LightGBM vs Ridge/LogReg (LSTM เลื่อนไป Tier 3)
 
-### Tier 3 — Production-Grade
-- [ ] Batch pipeline ด้วย **Airflow / Prefect** + เก็บข้อมูลลง **PostgreSQL / DuckDB**
-- [ ] ระบบ **Alert** ผ่าน Line Notify / Discord เมื่อ Crisis Score > 70
-- [ ] ขยายขอบเขตจาก US เป็น **Multi-asset** (Crypto, EM Equities, Commodities)
-- [ ] เทียบหลายโมเดล: XGBoost vs **LightGBM** vs **LSTM** vs **Transformer**
-- [ ] เพิ่ม **MLflow** สำหรับ experiment tracking
+### Tier 3 — Production-Grade ✅ 4/6 ทำเสร็จแล้ว
+- [ ] Batch pipeline (Airflow) — *ข้าม: GitHub Actions cron เหมาะกับ portfolio กว่า*
+- [ ] PostgreSQL store — *ข้าม: in-memory caching พอใช้ที่ scale นี้*
+- [x] **Discord webhook alerts** (ตั้ง threshold + test button)
+- [x] **Multi-asset** expansion (10 assets: US equity, EM, crypto, commodities)
+- [x] **LSTM** model เพิ่มใน comparison (PyTorch)
+- [x] **MLflow** experiment tracking (local file store)
 
 ---
 

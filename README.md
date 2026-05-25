@@ -177,11 +177,13 @@ Bayesian regime switching (probabilistic), GMM clustering (unsupervised).
 - [x] Transaction cost in backtest (configurable, 0-50 bps)
 - [x] Model comparison: XGBoost vs LightGBM vs Ridge/LogReg (LSTM in Tier 3)
 
-**Tier 3 — Production**
-- [ ] Batch pipeline (Airflow/Prefect) → PostgreSQL/DuckDB
-- [ ] Discord/Line webhook alert when score > 70
-- [ ] Multi-asset expansion (crypto, EM, commodities)
-- [ ] MLflow experiment tracking
+**Tier 3 — Production** ✅ 4/6 DONE
+- [ ] Batch pipeline (Airflow/Prefect) — *skipped: GitHub Actions cron is lighter for portfolio*
+- [ ] PostgreSQL/DuckDB store — *skipped: in-memory caching sufficient at this scale*
+- [x] Discord webhook alerts (configurable threshold + test button)
+- [x] Multi-asset expansion (10 assets: US equity, EM, crypto, commodities)
+- [x] LSTM model added to comparison (PyTorch)
+- [x] MLflow experiment tracking (local file store)
 
 ---
 
