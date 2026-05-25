@@ -9,7 +9,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from engine.backtester import calculate_professional_metrics, run_advanced_backtest
 from engine.regime_detector import classify_market_regime, dynamic_risk_equation
-from engine.ml_predictor import VIXForecaster
+from engine.ml_predictor import (
+    VIXForecaster, CrashClassifier,
+    walk_forward_validate, compare_models, SUPPORTED_MODELS
+)
+from engine.features import build_features
 
 
 # ---------- Fixtures ----------
@@ -91,3 +95,66 @@ def test_predictor_train_and_predict(synthetic_market_data):
     prediction = forecaster.predict_vix(synthetic_market_data)
     assert isinstance(prediction, (float, np.floating))
     assert 0 < float(prediction) < 200  # sanity range
+
+
+# ---------- Tier 2: feature engineering ----------
+def test_build_features_regression(synthetic_market_data):
+    clean, cols, target = build_features(synthetic_market_data, classification=False)
+    assert target == "Target_VIX_7D"
+    assert len(cols) >= 5
+    assert len(clean) >= 30
+    assert not clean.isna().any().any()
+
+
+def test_build_features_classification(synthetic_market_data):
+    clean, cols, target = build_features(synthetic_market_data, classification=True,
+                                         crash_threshold_pct=15)
+    assert target == "Target"
+    assert set(clean[target].unique()).issubset({0, 1})
+
+
+# ---------- Tier 2: walk-forward validation ----------
+def test_walk_forward_regression(synthetic_market_data):
+    result = walk_forward_validate(synthetic_market_data, "XGBoost",
+                                   task="regression", n_splits=3)
+    assert "mean_score" in result
+    assert len(result["fold_scores"]) == 3
+    assert len(result["predictions_df"]) > 0
+
+
+def test_walk_forward_classification(synthetic_market_data):
+    result = walk_forward_validate(synthetic_market_data, "LogReg",
+                                   task="classification", n_splits=3,
+                                   classification_kwargs={"crash_threshold_pct": 15})
+    assert result["primary_metric"] == "f1"
+    assert 0 <= result["mean_score"] <= 1 or np.isnan(result["mean_score"])
+
+
+# ---------- Tier 2: model comparison ----------
+def test_compare_models_regression(synthetic_market_data):
+    df = compare_models(synthetic_market_data, task="regression", n_splits=3)
+    assert set(df["Model"]) == set(SUPPORTED_MODELS["regression"])
+    assert "Mean Score" in df.columns
+
+
+# ---------- Tier 2: classification ----------
+def test_crash_classifier(synthetic_market_data):
+    clf = CrashClassifier("XGBoost", crash_threshold_pct=15)
+    res = clf.train(synthetic_market_data)
+    assert res["status"] == "success"
+    assert "Accuracy" in res["metrics"]
+    prob = clf.predict_crash_probability(synthetic_market_data)
+    assert prob is None or 0 <= prob <= 1
+
+
+# ---------- Tier 2: transaction cost in backtest ----------
+def test_backtest_transaction_cost(synthetic_market_data):
+    df = synthetic_market_data.copy()
+    df["Risk_Signal"] = (df["VIX"] > 18).astype(int)
+
+    no_cost = run_advanced_backtest(df.copy(), transaction_cost_bps=0)
+    with_cost = run_advanced_backtest(df.copy(), transaction_cost_bps=25)
+
+    assert no_cost["Trading_Stats"]["Number of Trades"] > 0
+    # ต้นทุน 25 bps ต้องทำให้ Sharpe ต่ำลง (หรือเท่าเดิมถ้าไม่มีการเทรด)
+    assert with_cost["Black_Swan_Strategy"]["Sharpe Ratio"] <= no_cost["Black_Swan_Strategy"]["Sharpe Ratio"] + 0.01
