@@ -15,6 +15,7 @@ from sklearn.metrics import (
 )
 
 from engine.features import build_features
+from engine.lstm_model import LSTMRegressor
 
 
 # ==========================================================
@@ -31,6 +32,9 @@ def _make_model(name, task):
                                      max_depth=4, num_leaves=15, verbose=-1)
         if name == "Ridge":
             return Ridge(alpha=1.0)
+        if name == "LSTM":
+            # ลด epochs เพื่อความเร็วใน walk-forward (5 folds × 30 epochs = สมเหตุสมผล)
+            return LSTMRegressor(seq_length=10, hidden_size=32, epochs=30, batch_size=32)
     elif task == "classification":
         if name == "XGBoost":
             return xgb.XGBClassifier(n_estimators=150, learning_rate=0.05,
@@ -44,7 +48,7 @@ def _make_model(name, task):
 
 
 SUPPORTED_MODELS = {
-    "regression": ["XGBoost", "LightGBM", "Ridge"],
+    "regression": ["XGBoost", "LightGBM", "Ridge", "LSTM"],
     "classification": ["XGBoost", "LightGBM", "LogReg"],
 }
 
