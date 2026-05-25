@@ -459,6 +459,10 @@ with tab2:
     st.caption("ใช้โมเดล XGBoost ที่ฝึกบน lag features ของ VIX และ S&P 500 returns")
 
     if hist_data is not None and not hist_data.empty and predicted_vix_top is not None:
+        # Pylance type guard — ช่วยให้รู้ว่าตัวแปรเหล่านี้ไม่ใช่ None แล้ว
+        assert predicted_vix_top is not None
+        _vix_safe: float = float(current_vix) if current_vix is not None else 0.0
+
         # Top metrics row
         m1, m2, m3, m4 = st.columns(4)
         with m1:
@@ -469,7 +473,7 @@ with tab2:
         with m2:
             st.metric(
                 "พยากรณ์ (7 วัน)", f"{predicted_vix_top:.2f}",
-                delta=f"{predicted_vix_top - current_vix:+.2f}" if current_vix else None,
+                delta=f"{predicted_vix_top - _vix_safe:+.2f}" if current_vix else None,
                 delta_color="inverse",
                 help="ค่า VIX ที่โมเดลคาดว่าจะเป็นในอีก 7 วันทำการ"
             )
@@ -516,7 +520,7 @@ with tab2:
 
             direction = (
                 "📈 **VIX จะขึ้น** — ตลาดอาจผันผวนมากขึ้น เตรียมระวัง"
-                if predicted_vix_top > current_vix
+                if predicted_vix_top > _vix_safe
                 else "📉 **VIX จะลง** — สถานการณ์น่าจะคลี่คลาย"
             )
             st.markdown(direction)
@@ -834,10 +838,9 @@ with tab4:
                     help="ความแปรปรวนของ performance ระหว่าง fold | สูง = ไม่เสถียร")
         wfm3.metric("Number of Folds", wf_splits)
 
-        st.plotly_chart(
-            draw_walkforward_chart(wf_result["predictions_df"], task="regression"),
-            use_container_width=True
-        )
+        wf_fig = draw_walkforward_chart(wf_result["predictions_df"], task="regression")
+        if wf_fig is not None:
+            st.plotly_chart(wf_fig, use_container_width=True)
         st.caption(
             "💡 แต่ละ fold มีแถบสีพื้นหลังแยก | เส้นน้ำเงิน = ค่าจริง, ส้มประ = โมเดลทำนาย | "
             "ถ้าเส้นใกล้กัน = โมเดลแม่น"
@@ -908,7 +911,8 @@ with tab4:
                 )
                 if shap_values is not None:
                     fig_shap = draw_shap_summary(shap_values, feature_names, X_sample)
-                    st.plotly_chart(fig_shap, use_container_width=True)
+                    if fig_shap is not None:
+                        st.plotly_chart(fig_shap, use_container_width=True)
                     st.caption(
                         "📊 แท่งยาว = feature นั้นมีผลต่อการทำนายมาก | "
                         "**แตกต่างจาก XGBoost feature_importance ตรงที่** SHAP คำนวณจาก Shapley values ใน game theory → "
