@@ -2,6 +2,11 @@
 
 > 🌐 **Languages:** **English** | [ภาษาไทย](README.th.md)
 
+[![CI](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml/badge.svg)](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.31%2B-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 AI-powered & Quant-driven early warning system for financial crises.
 Combines **NLP sentiment analysis**, **macro volatility forecasting**, and **regime detection**
 to produce a single Crisis Risk Score (0–100) and a backtested trading strategy.
@@ -58,21 +63,41 @@ black-swan-indicator/
 
 ## 🚀 Quick Start
 
+### Option A — Local Python
 ```bash
-# 1. Clone & setup
-git clone <repo-url>
+git clone https://github.com/oomNoNe/black-swan-indicator.git
 cd black-swan-indicator
 python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
-
-# 2. Install
 pip install -r requirements.txt
-
-# 3. Run
 streamlit run app.py
 ```
 
+### Option B — Docker (recommended for deployment)
+```bash
+docker build -t black-swan-indicator .
+docker run -p 8501:8501 black-swan-indicator
+```
+Open http://localhost:8501
+
 The first run downloads the FinBERT model (~440 MB). Subsequent runs are cached.
+
+### Option C — Streamlit Cloud (one-click hosted)
+1. Fork this repo to your GitHub account
+2. Go to https://share.streamlit.io
+3. Click **"New app"** → select your fork → main branch → `app.py`
+4. Deploy and get a public URL
+
+---
+
+## 🧪 Development
+
+Run tests:
+```bash
+pytest tests/ -v
+```
+
+CI runs automatically on push via GitHub Actions ([workflow](.github/workflows/ci.yml)).
 
 ---
 
@@ -138,12 +163,25 @@ Bayesian regime switching (probabilistic), GMM clustering (unsupervised).
 
 ## 🔭 Roadmap
 
+**Tier 1 — Deploy & Polish**
+- [x] Dockerfile (multi-stage, non-root)
+- [x] GitHub Actions CI (pytest + lint)
+- [x] CI/license/Python badges
+- [ ] Streamlit Cloud live demo URL
+
+**Tier 2 — ML/Quant Upgrades**
 - [ ] Walk-forward validation instead of single train/test split
-- [ ] Add yield curve inversion, credit spreads, gold/oil features
-- [ ] Switch to classification (crash vs. no-crash) with Precision/Recall
+- [ ] Add features: yield curve, credit spread, gold/oil, USD index
+- [ ] Switch to classification (crash vs. no-crash) with Precision/Recall/F1
 - [ ] SHAP feature importance overlay
+- [ ] Transaction cost in backtest (~0.05-0.10% per trade)
+- [ ] Model comparison: XGBoost vs LightGBM vs LSTM
+
+**Tier 3 — Production**
+- [ ] Batch pipeline (Airflow/Prefect) → PostgreSQL/DuckDB
 - [ ] Discord/Line webhook alert when score > 70
-- [ ] Dockerfile + Streamlit Cloud deploy
+- [ ] Multi-asset expansion (crypto, EM, commodities)
+- [ ] MLflow experiment tracking
 
 ---
 

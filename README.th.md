@@ -2,6 +2,11 @@
 
 > 🌐 **Languages:** [English](README.md) | **ภาษาไทย**
 
+[![CI](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml/badge.svg)](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.31%2B-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ระบบเตือนภัยล่วงหน้าสำหรับวิกฤตการเงิน ขับเคลื่อนด้วย AI และ Quant Analysis
 ผสาน **การวิเคราะห์ Sentiment ข่าวด้วย NLP**, **การพยากรณ์ความผันผวนของตลาดด้วย ML**,
 และ **การตรวจจับสภาพตลาด (Regime Detection)** เพื่อสร้าง Crisis Risk Score (0–100)
@@ -65,37 +70,43 @@ black-swan-indicator/
 
 ## 🚀 วิธีติดตั้งและรัน
 
-### 1. Clone Repository
+### ทางเลือก A — ติดตั้งด้วย Python (local)
 ```bash
 git clone https://github.com/oomNoNe/black-swan-indicator.git
 cd black-swan-indicator
-```
-
-### 2. สร้าง Virtual Environment
-```bash
 python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# macOS / Linux
-source venv/bin/activate
-```
-
-### 3. ติดตั้ง Dependencies
-```bash
+venv\Scripts\activate            # Windows
+# source venv/bin/activate       # macOS / Linux
 pip install -r requirements.txt
-```
-
-### 4. รัน App
-```bash
 streamlit run app.py
 ```
 
-จากนั้นเปิด browser ไปที่ **http://localhost:8501**
+### ทางเลือก B — Docker (แนะนำสำหรับ deploy)
+```bash
+docker build -t black-swan-indicator .
+docker run -p 8501:8501 black-swan-indicator
+```
+เปิด http://localhost:8501
+
+### ทางเลือก C — Streamlit Cloud (host ฟรี ไม่ต้องเซ็ตอัพ)
+1. Fork repo นี้ไปยัง GitHub account ของคุณ
+2. ไปที่ https://share.streamlit.io
+3. คลิก **"New app"** → เลือก fork ของคุณ → branch main → `app.py`
+4. กด Deploy รอ 5-10 นาที จะได้ public URL
 
 > ⚠️ **หมายเหตุ**: ครั้งแรกที่รันจะ download โมเดล FinBERT (~440 MB)
 > ใช้เวลา 2-5 นาที (ขึ้นกับความเร็วเน็ต) ครั้งต่อไปจะใช้แคชอัตโนมัติ
+
+---
+
+## 🧪 การพัฒนา (Development)
+
+รัน tests:
+```bash
+pytest tests/ -v
+```
+
+CI จะรันอัตโนมัติทุกครั้งที่ push ผ่าน GitHub Actions ([workflow](.github/workflows/ci.yml))
 
 ---
 
@@ -198,8 +209,9 @@ pytest tests/ -v
 
 ### Tier 1 — Deploy & Polish
 - [ ] Deploy ขึ้น **Streamlit Cloud** (live demo URL)
-- [ ] เพิ่ม **Dockerfile** สำหรับ containerization
-- [ ] เพิ่ม **CI/CD** (GitHub Actions รัน pytest อัตโนมัติ)
+- [x] เพิ่ม **Dockerfile** (multi-stage, non-root user)
+- [x] เพิ่ม **CI/CD** ด้วย GitHub Actions (รัน pytest + smoke test อัตโนมัติ)
+- [x] เพิ่ม **badges** (CI status, Python version, license)
 - [ ] เพิ่ม **screenshot** ใน README
 
 ### Tier 2 — ยกระดับ ML / Quant

@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+htmlcov
+*.egg-info
+
+# Virtual envs
+.venv
+venv
+env
+
+# IDE
+.idea
+.vscode
+.claude
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs (not needed at runtime)
+README.md
+README.th.md
+docs
+
+# Local dev
+.env
+.streamlit/secrets.toml
+*.log
+
+# Tests (not needed at runtime — keep image small)
+tests
