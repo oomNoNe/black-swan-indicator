@@ -1,0 +1,49 @@
+name: Rebuild Live Report
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # ทุกวันจันทร์ 06:00 UTC (= 13:00 ICT)
+  workflow_dispatch:      # รันด้วยมือผ่าน Actions tab ได้
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/build_report.py'
+      - 'engine/**'
+      - 'data/**'
+      - 'ui/components.py'
+
+permissions:
+  contents: write  # สำหรับ commit + push
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build report
+        run: python scripts/build_report.py
+
+      - name: Commit and push if changed
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add docs/index.html
+          if ! git diff --staged --quiet; then
+            git commit -m "auto: rebuild live report [skip ci]"
+            git push
+          else
+            echo "No changes to report"
+          fi

@@ -2,10 +2,14 @@
 
 > 🌐 **Languages:** **English** | [ภาษาไทย](README.th.md)
 
+[![Live Report](https://img.shields.io/badge/📊_Live_Report-View_now-success?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/)
+
 [![CI](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml/badge.svg)](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.31%2B-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> 👉 **Click the green badge above** to see the live report instantly (no install required)
 
 AI-powered & Quant-driven early warning system for financial crises.
 Combines **NLP sentiment analysis**, **macro volatility forecasting**, and **regime detection**

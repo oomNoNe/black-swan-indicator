@@ -2,10 +2,14 @@
 
 > 🌐 **Languages:** [English](README.md) | **ภาษาไทย**
 
+[![Live Report](https://img.shields.io/badge/📊_รายงานสด-ดูเลย-success?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/)
+
 [![CI](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml/badge.svg)](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.31%2B-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+> 👉 **คลิกแบดจ์เขียวด้านบน** เพื่อดูรายงานสดทันที (ไม่ต้องติดตั้งอะไร)
 
 ระบบเตือนภัยล่วงหน้าสำหรับวิกฤตการเงิน ขับเคลื่อนด้วย AI และ Quant Analysis
 ผสาน **การวิเคราะห์ Sentiment ข่าวด้วย NLP**, **การพยากรณ์ความผันผวนของตลาดด้วย ML**,
