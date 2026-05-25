@@ -190,6 +190,62 @@ def load_crash_classifier(_macro_df, crash_threshold):
 
 
 # ==========================================================
+# 🚀 PERFORMANCE CACHE WRAPPERS — เปิดครั้งเดียวแล้วเร็วตลอด
+# ==========================================================
+# คำเตือนสำหรับ Streamlit: ใช้ `_` prefix สำหรับ args ที่เป็น
+# object ใหญ่ (DataFrame, model) เพื่อให้ Streamlit ข้าม hashing
+# (เร็วขึ้นมาก — เพราะรู้อยู่แล้วว่า object ไม่เปลี่ยน)
+
+@st.cache_data(ttl=900, show_spinner=False)  # 15 นาที
+def cached_current_vix():
+    """VIX ปัจจุบัน — refresh ทุก 15 นาที"""
+    return get_current_vix()
+
+
+@st.cache_data(ttl=900, show_spinner=False)  # 15 นาที
+def cached_news_with_sentiment(_sentiment_ai, news_limit):
+    """ดึงข่าว + วิเคราะห์ sentiment ครั้งเดียวต่อ session"""
+    news_df = fetch_financial_news()
+    if news_df is None or news_df.empty:
+        return None
+    news_df = news_df.head(news_limit).copy()
+    news_df[['Sentiment', 'Confidence']] = news_df['Headline'].apply(
+        lambda x: pd.Series(_sentiment_ai.analyze(x))
+    )
+    return news_df
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_walkforward(_macro_df, model_name, task, n_splits, crash_threshold):
+    """Walk-forward — heavy! cache 1 ชม."""
+    kwargs = {"crash_threshold_pct": crash_threshold} if task == "classification" else None
+    return walk_forward_validate(
+        _macro_df, model_name=model_name, task=task,
+        n_splits=n_splits, classification_kwargs=kwargs
+    )
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_compare_models(_macro_df, task, n_splits, crash_threshold):
+    """Model comparison — very heavy! cache 1 ชม."""
+    kwargs = {"crash_threshold_pct": crash_threshold} if task == "classification" else None
+    return compare_models(_macro_df, task=task, n_splits=n_splits,
+                          classification_kwargs=kwargs)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def cached_shap_values(_model, _features_df):
+    """SHAP — cache เพราะหนัก"""
+    return compute_shap_values(_model, _features_df)
+
+
+@st.cache_data(ttl=1800, show_spinner=False)  # 30 นาที
+def cached_asset_data(asset_name, years):
+    """Multi-asset fetch — cache แต่ละ asset"""
+    return fetch_asset_data(asset_name, years)
+
+
+# ==========================================================
 # SIDEBAR — Global Controls + Glossary
 # ==========================================================
 with st.sidebar:
@@ -259,18 +315,41 @@ with st.sidebar:
 # ==========================================================
 # Load Data + Models
 # ==========================================================
-with st.spinner("⏳ กำลังโหลดข้อมูลตลาด + เทรนโมเดล AI..."):
+# Default assets ที่จะ pre-fetch ตอนเริ่ม (เพื่อให้ Tab 5 instant)
+DEFAULT_ASSETS = ["S&P 500", "Bitcoin", "Gold", "Emerging Markets (EEM)"]
+
+# 🚀 Pre-warm everything — เปิดครั้งเดียวแล้วเร็วตลอด
+with st.status("⏳ กำลังโหลดทุกอย่างให้พร้อม (ครั้งแรกใช้เวลา ~60 วินาที)...", expanded=False) as status:
+    status.update(label="📰 [1/7] โหลด FinBERT sentiment model...")
     sentiment_ai = load_sentiment_ai()
+
+    status.update(label="📊 [2/7] ดึง S&P 500 + VIX history...")
     hist_data = load_historical_data(years=years_lookback)
+
+    status.update(label="🌍 [3/7] ดึง macro features (yield curve, gold, oil, DXY)...")
     macro_data = load_macro_data(years=years_lookback)
+
+    status.update(label="🤖 [4/7] เทรน XGBoost VIX forecaster...")
     ml_forecaster = load_ml_predictor(hist_data)
+
+    status.update(label="🚨 [5/7] เทรน Crash classifier...")
     crash_classifier = load_crash_classifier(macro_data, crash_threshold)
+
+    status.update(label="🌡️ [6/7] ดึงค่า VIX ปัจจุบัน + ข่าวการเงิน...")
+    _ = cached_current_vix()
+    _ = cached_news_with_sentiment(sentiment_ai, news_lookback)
+
+    status.update(label="🌐 [7/7] Pre-fetch multi-asset data...")
+    for _asset in DEFAULT_ASSETS:
+        _ = cached_asset_data(_asset, years_lookback)
+
+    status.update(label="✅ พร้อมใช้งาน! tab switching จะ instant แล้ว", state="complete", expanded=False)
 
 
 # ==========================================================
 # TOP KPI ROW — Always visible (มี tooltip ไทยทุกอัน)
 # ==========================================================
-current_vix = get_current_vix()
+current_vix = cached_current_vix()
 current_regime = "Unknown"
 predicted_vix_top = None
 
@@ -390,14 +469,9 @@ with tab1:
     with col_right:
         st.markdown("#### 🌍 Sentiment ข่าวการเงินทั่วโลก")
 
-        with st.spinner("📡 กำลังดึงข่าวล่าสุด..."):
-            news_df = fetch_financial_news()
+        news_df = cached_news_with_sentiment(sentiment_ai, news_lookback)
 
         if news_df is not None and not news_df.empty:
-            news_df = news_df.head(news_lookback).copy()
-            news_df[['Sentiment', 'Confidence']] = news_df['Headline'].apply(
-                lambda x: pd.Series(sentiment_ai.analyze(x))
-            )
             sentiment_scores = {"NEGATIVE": 100, "NEUTRAL": 50, "POSITIVE": 0}
             news_df['Risk_Score'] = news_df['Sentiment'].map(sentiment_scores).fillna(50)
             avg_news_risk = news_df['Risk_Score'].mean()
@@ -826,10 +900,10 @@ with tab4:
                 """.format(n=wf_splits)
             )
 
-        with st.spinner("⏳ กำลังรัน walk-forward (อาจใช้เวลา 5-10 วินาที)..."):
-            wf_result = walk_forward_validate(
-                macro_data, model_name="XGBoost", task="regression", n_splits=wf_splits
-            )
+        wf_result = cached_walkforward(
+            macro_data, model_name="XGBoost", task="regression",
+            n_splits=wf_splits, crash_threshold=crash_threshold,
+        )
 
         wfm1, wfm2, wfm3 = st.columns(3)
         wfm1.metric("Mean R²", f"{wf_result['mean_score']:.3f}",
@@ -858,8 +932,8 @@ with tab4:
 
         with cmp_col1:
             st.markdown("##### 📈 Regression (predict VIX level)")
-            with st.spinner("เทียบโมเดล regression..."):
-                cmp_reg = compare_models(macro_data, task="regression", n_splits=wf_splits)
+            cmp_reg = cached_compare_models(macro_data, task="regression",
+                                            n_splits=wf_splits, crash_threshold=crash_threshold)
             fig_reg = draw_model_comparison(cmp_reg)
             if fig_reg:
                 st.plotly_chart(fig_reg, use_container_width=True)
@@ -867,11 +941,8 @@ with tab4:
 
         with cmp_col2:
             st.markdown("##### 🎯 Classification (crash vs no-crash)")
-            with st.spinner("เทียบโมเดล classification..."):
-                cmp_cls = compare_models(
-                    macro_data, task="classification", n_splits=wf_splits,
-                    classification_kwargs={"crash_threshold_pct": crash_threshold}
-                )
+            cmp_cls = cached_compare_models(macro_data, task="classification",
+                                            n_splits=wf_splits, crash_threshold=crash_threshold)
             fig_cls = draw_model_comparison(cmp_cls)
             if fig_cls:
                 st.plotly_chart(fig_cls, use_container_width=True)
@@ -903,25 +974,24 @@ with tab4:
             "SHAP บอกว่าแต่ละ feature 'ผลักดัน' การทำนายไปทางไหน — เห็นชัดกว่า feature_importance ปกติ"
         )
 
-        with st.spinner("⏳ คำนวณ SHAP values..."):
-            try:
-                clean_df, feat_cols, _ = build_features(macro_data, classification=False)
-                shap_values, feature_names, X_sample = compute_shap_values(
-                    ml_forecaster.model, clean_df[feat_cols]
+        try:
+            clean_df, feat_cols, _ = build_features(macro_data, classification=False)
+            shap_values, feature_names, X_sample = cached_shap_values(
+                ml_forecaster.model, clean_df[feat_cols]
+            )
+            if shap_values is not None:
+                fig_shap = draw_shap_summary(shap_values, feature_names, X_sample)
+                if fig_shap is not None:
+                    st.plotly_chart(fig_shap, use_container_width=True)
+                st.caption(
+                    "📊 แท่งยาว = feature นั้นมีผลต่อการทำนายมาก | "
+                    "**แตกต่างจาก XGBoost feature_importance ตรงที่** SHAP คำนวณจาก Shapley values ใน game theory → "
+                    "fair & consistent ระหว่าง features"
                 )
-                if shap_values is not None:
-                    fig_shap = draw_shap_summary(shap_values, feature_names, X_sample)
-                    if fig_shap is not None:
-                        st.plotly_chart(fig_shap, use_container_width=True)
-                    st.caption(
-                        "📊 แท่งยาว = feature นั้นมีผลต่อการทำนายมาก | "
-                        "**แตกต่างจาก XGBoost feature_importance ตรงที่** SHAP คำนวณจาก Shapley values ใน game theory → "
-                        "fair & consistent ระหว่าง features"
-                    )
-                else:
-                    st.warning("ไม่สามารถคำนวณ SHAP values ได้")
-            except Exception as e:
-                st.error(f"SHAP error: {e}")
+            else:
+                st.warning("ไม่สามารถคำนวณ SHAP values ได้")
+        except Exception as e:
+            st.error(f"SHAP error: {e}")
 
 # ==========================================
 # TAB 5: Multi-Asset + Alerts (Tier 3)
@@ -939,17 +1009,16 @@ with tab5:
     selected_assets = st.multiselect(
         "เลือก assets ที่จะเทียบ",
         options=list(ASSET_UNIVERSE.keys()),
-        default=["S&P 500", "Bitcoin", "Gold", "Emerging Markets (EEM)"],
-        help="เลือกได้หลายตัว — แต่ละตัวจะดึงข้อมูลจาก yfinance (อาจใช้เวลา)"
+        default=DEFAULT_ASSETS,
+        help="เลือกได้หลายตัว — assets ใน default จะ instant (pre-warmed) | ตัวอื่นจะดึงครั้งแรกแล้ว cache 30 นาที"
     )
 
     if selected_assets:
-        with st.spinner(f"⏳ กำลังดึงข้อมูล {len(selected_assets)} assets..."):
-            asset_data = {}
-            for name in selected_assets:
-                df = fetch_asset_data(name, years=years_lookback)
-                if df is not None and not df.empty:
-                    asset_data[name] = df
+        asset_data = {}
+        for name in selected_assets:
+            df = cached_asset_data(name, years_lookback)
+            if df is not None and not df.empty:
+                asset_data[name] = df
 
         if asset_data:
             # KPI cards — vol ล่าสุดของแต่ละ asset
