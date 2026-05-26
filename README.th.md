@@ -2,7 +2,8 @@
 
 > 🌐 **Languages:** [English](README.md) | **ภาษาไทย**
 
-[![Live Report](https://img.shields.io/badge/📊_รายงานสด-ดูเลย-success?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/)
+[![Live Report (TH)](https://img.shields.io/badge/📊_รายงานสด-ภาษาไทย-success?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/)
+[![Live Report (EN)](https://img.shields.io/badge/📊_Live_Report-English-blue?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/index.en.html)
 
 [![CI](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml/badge.svg)](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)

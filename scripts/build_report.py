@@ -1,25 +1,27 @@
 """
-Build Report — generate static HTML report (ELI5 / Beginner-friendly version)
+Build Report — generate static HTML reports in Thai + English
 
 วิธีรัน:
-    python scripts/build_report.py
+    python scripts/build_report.py            # builds both
+    python scripts/build_report.py --lang en  # English only
+    python scripts/build_report.py --lang th  # Thai only
 
 Output:
-    docs/index.html
+    docs/index.html      (Thai, default landing)
+    docs/index.en.html   (English)
 
-แนวคิด: อธิบายเหมือนคุยกับเด็ก 5 ขวบหรือคนที่ไม่รู้เรื่องการเงิน/ML เลย
-ใช้การเปรียบเทียบกับสิ่งของในชีวิตประจำวัน (อากาศ, อุณหภูมิ, หมอดู)
+แนวคิด: เนื้อหาเขียนสำหรับ "เด็ก ม.3 ที่อยากรู้เรื่องการเงิน" —
+ใช้ศัพท์จริง (VIX, R², Sharpe) แต่มีคำอธิบายสั้นๆ ทุกครั้ง
+ไม่ผิดทาง 5 ขวบ (กำกวมเกินไป) แต่ก็ไม่ jargon จัดจน outsider ไม่เข้าใจ
 """
 import sys
-import os
+import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Fix Windows console emoji encoding
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")
 
-# add parent to path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
@@ -51,20 +53,428 @@ VOL_MULTIPLIER = 1.5
 TRANSACTION_COST_BPS = 10
 WF_SPLITS = 5
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "docs"
-OUTPUT_FILE = OUTPUT_DIR / "index.html"
 
 pio.templates.default = "plotly_dark"
+
+LANG_FILENAMES = {"th": "index.html", "en": "index.en.html"}
+
+
+# ==========================================================
+# LOCALIZED STRINGS — single source of truth for both languages
+# ==========================================================
+S = {
+    "th": {
+        # Header
+        "html_lang": "th",
+        "title": "🚨 Black Swan Risk Indicator — Live Report",
+        "hero_h1": "🚨 Black Swan Risk Indicator",
+        "hero_sub": "ระบบเตือนภัยล่วงหน้าก่อนวิกฤตการเงิน · รวม NLP sentiment + ML forecasting + regime detection",
+        "updated_label": "📅 อัพเดทล่าสุด:",
+        "data_window": "📊 ข้อมูลย้อนหลัง {years} ปี",
+        "code_link": "ดูซอร์สโค้ดบน GitHub →",
+        "lang_switch_label": "🌐 Languages:",
+        "lang_other_label": "English",
+        "lang_other_href": "index.en.html",
+
+        # Section 1
+        "sec1_h2": "🌤️ สรุปสภาพตลาดวันนี้",
+        "sec1_tag": "ภาพรวม 30 วินาที — ตัวเลขที่นักลงทุนต้องจับตา + ความหมายเชิง regime",
+
+        # Hero status messages
+        "hero_safe_title": "Risk ระดับต่ำ — ตลาดอยู่ในโหมดปกติ",
+        "hero_safe_sub": "VIX ต่ำ + Regime = Trending Bull → กลยุทธ์ลงทุนปกติยังใช้ได้",
+        "hero_caution_title": "Risk ระดับกลาง — ต้องเฝ้าระวัง",
+        "hero_caution_sub": "VIX เริ่มขยับ หรือ Regime ออกข้าง → ติดตามใกล้ชิด",
+        "hero_danger_title": "Risk ระดับสูง — สัญญาณวิกฤต",
+        "hero_danger_sub": "VIX > 30 หรือ Regime = Panic → พิจารณาลดความเสี่ยง",
+
+        # Top facts
+        "fact_vix_label": "VIX ปัจจุบัน",
+        "fact_regime_label": "Market Regime",
+        "fact_sp500_label": "S&P 500",
+        "fact_sp500_desc": "ดัชนีหุ้นใหญ่อันดับ 500 ของอเมริกา",
+
+        # Section 2 — VIX
+        "sec2_h2": "🌡️ VIX = ดัชนีความกลัวของตลาด",
+        "sec2_tag": "CBOE Volatility Index — คำนวณจาก implied vol ของ option S&P 500 30 วันข้างหน้า",
+        "vix_explainer": """
+        <div class="simple-list">
+            <ul>
+                <li><strong>VIX < 15</strong> = ตลาดสงบมาก (อาจ complacent เกินไป)</li>
+                <li><strong>VIX 15-20</strong> = ระดับปกติของตลาด bull</li>
+                <li><strong>VIX 20-30</strong> = นักลงทุนเริ่มกังวล</li>
+                <li><strong>VIX 30-40</strong> = สัญญาณวิกฤต (ปี 2018 ขึ้นดอกเบี้ย, 2022 เงินเฟ้อ)</li>
+                <li><strong>VIX > 40</strong> = วิกฤตจริง — สูงสุดในประวัติศาสตร์: <strong>82.69</strong> (16 มี.ค. 2020, COVID)</li>
+            </ul>
+        </div>
+        """,
+        "sec2_chart_title": "📈 VIX history + AI forecast (7 วันข้างหน้า)",
+        "sec2_chart_caption": "💡 <strong>วิธีอ่าน</strong>: เส้นน้ำเงิน = VIX จริง · เส้นส้มประ = ค่าเฉลี่ย 20 วัน · ดาวแดง = จุดที่ XGBoost ทำนายว่า VIX จะอยู่ที่เท่าไหร่ในอีก 7 วัน",
+
+        # Section 3 — Forecast
+        "sec3_h2": "🔮 ML Forecast: ทำนาย VIX 7 วันข้างหน้า",
+        "sec3_tag": "ใช้ XGBoost เทรนบน lag features ของ VIX + macro indicators (yield curve, gold, oil, DXY) — แต่ดูผลความแม่นใน section ถัดไปก่อน trust",
+        "forecast_up_label": "พยากรณ์: VIX จะเพิ่มขึ้น",
+        "forecast_up_msg": "โมเดลคาดว่า VIX จะอยู่ที่ {pred:.1f} (เพิ่ม {delta:+.1f} จากวันนี้) — เพิ่ม risk monitoring",
+        "forecast_flat_label": "พยากรณ์: VIX ทรงตัว",
+        "forecast_flat_msg": "VIX คาดว่าจะอยู่ที่ {pred:.1f} ใกล้เคียงปัจจุบัน — สถานการณ์ stable",
+        "forecast_down_label": "พยากรณ์: VIX จะลดลง",
+        "forecast_down_msg": "VIX คาดว่าจะลดเหลือ {pred:.1f} (ลด {delta:.1f}) — สัญญาณคลี่คลาย",
+        "forecast_speech": "<strong>หมายเหตุสำคัญ</strong>: VIX เป็นตัวแปรที่พยากรณ์ยากมาก — แม้แต่ academic paper ก็มัก R² ใกล้ 0 ใช้ค่านี้เป็น <em>directional signal</em> ไม่ใช่ค่าเป๊ะ ดูผลความแม่นใน section ถัดไป",
+
+        # Section 4 — Accuracy
+        "sec4_h2": "🎯 แต่... โมเดลแม่นแค่ไหน?",
+        "sec4_tag": "เราใช้ <strong>walk-forward cross-validation</strong> (TimeSeriesSplit) — มาตรฐาน time-series ที่ป้องกัน look-ahead bias",
+        "accuracy_explainer": """
+        <div class="simple-list">
+            <ul>
+                <li><strong>R²</strong> (R-squared) = วัดว่าโมเดลอธิบายข้อมูลได้ดีกว่าเดาค่าเฉลี่ยแค่ไหน</li>
+                <li><strong>R² = 1.0</strong> = ทำนายเป๊ะทุกครั้ง (ไม่เคยเกิดในงานจริง)</li>
+                <li><strong>R² = 0</strong> = เท่ากับเดาด้วยค่าเฉลี่ย — ไม่มีประโยชน์</li>
+                <li><strong>R² ติดลบ</strong> = แย่กว่าเดาด้วยค่าเฉลี่ย — สัญญาณว่าโมเดลใช้ไม่ได้</li>
+            </ul>
+        </div>
+        """,
+        "acc_good_msg": "โมเดลทำได้ดีพอควร — มี predictive power เกินกว่า random",
+        "acc_ok_msg": "โมเดลแม่นนิดหน่อย — ดีกว่าเดามั่วเล็กน้อย",
+        "acc_bad_msg": "โมเดล <strong>ไม่สามารถทำนาย VIX ได้ดีกว่าเดาค่าเฉลี่ย</strong> — สอดคล้องกับ Random Walk Hypothesis ที่ Fama (Nobel 2013) เสนอ ตลาดมี randomness สูงมากจน ML ทำนายแย่กว่า baseline ง่ายๆ",
+
+        # Section 5 — Model Comparison
+        "sec5_h2": "⚔️ เปรียบเทียบโมเดล (Model Comparison)",
+        "sec5_tag": "ทดสอบ 4 โมเดล ML + 1 Naive baseline ด้วย walk-forward CV — ใครชนะใน task พยากรณ์ VIX?",
+        "models_list": """
+        <div class="simple-list">
+            <ul>
+                <li><strong>👶 Naive baseline</strong>: persistence model — ทำนายว่า "VIX อีก 7 วัน = VIX วันนี้" (ไม่ใช้ ML เลย)</li>
+                <li><strong>🌲 XGBoost</strong>: gradient-boosted trees, regularized (max_depth=3, n_estimators=100)</li>
+                <li><strong>💡 LightGBM</strong>: tree-based แบบเร็ว มี leaf-wise growth</li>
+                <li><strong>📐 Ridge</strong>: linear regression + L2 regularization</li>
+                <li><strong>🧠 LSTM</strong>: 1-layer PyTorch LSTM (32 hidden units, dropout 0.2)</li>
+            </ul>
+        </div>
+        """,
+        "winner_label": "ผู้ชนะ",
+        "winner_desc": "ผลแม่นที่สุดในการทดสอบครั้งนี้",
+        "loser_label": "อันดับท้าย",
+        "loser_desc": "ผลแย่สุดในรอบนี้",
+        "cmp_naive_wins": "<strong>เซอร์ไพรส์! Naive baseline ชนะทุกโมเดล ML</strong><br><br>โมเดล \"VIX อีก 7 วัน = VIX วันนี้\" (R² = {naive_score:.3f}) ชนะ XGBoost, LightGBM, Ridge, และ LSTM ทุกตัว นี่คือ <strong>Random Walk Hypothesis</strong> ในการเงิน — ราคาสินทรัพย์เคลื่อนไหวแบบ stochastic สูง การทำนายระยะสั้นแทบเป็นไปไม่ได้<br><br><strong>บทเรียน Engineering</strong>: ทดสอบ naive baseline ก่อนเสมอ ถ้าโมเดล ML ไม่ชนะ persistence model = อย่า deploy",
+        "cmp_ml_wins": "<strong>{best_model}</strong> ชนะ task นี้ (R² = {best_score:.3f}) แต่เราใส่ <strong>Naive baseline</strong> เป็นมาตรฐานเทียบ ทุกโมเดล ML ที่ deploy ในงานจริงควรชนะ persistence model — มิฉะนั้นอย่าใช้",
+
+        # Section 6 — SHAP
+        "sec6_h2": "🔍 SHAP: AI ตัดสินใจจากอะไร?",
+        "sec6_tag": "<strong>SHAP (SHapley Additive exPlanations)</strong> ใช้ game theory บอกว่าแต่ละ feature ผลักดันการทำนายไปทางไหน — interpretable AI standard",
+        "shap_explainer": """
+        <div class="simple-list">
+            <ul>
+                <li>🎯 SHAP value คำนวณจาก <strong>Shapley values</strong> (Nobel economics 1953)</li>
+                <li>📊 บอก contribution ของแต่ละ feature ต่อ prediction</li>
+                <li>✅ <strong>Fair & consistent</strong> มากกว่า feature_importance ของ XGBoost ปกติ</li>
+                <li>🔍 ใช้ debug model behavior ได้</li>
+            </ul>
+        </div>
+        """,
+        "shap_top_msg": "โมเดลพึ่ง <strong>{top_feat}</strong> มากที่สุด — เป็น dominant signal ในการทำนาย",
+
+        # COVID
+        "covid_h2": "🦠 Case Study: COVID-19 Crash 2020",
+        "covid_tag": "ตัวอย่างจริง — ระบบ rule-based ของเราเตือนทันเหตุการณ์วิกฤตที่ใหญ่ที่สุดในรอบ 10 ปีหรือไม่?",
+        "covid_first_signal": "สัญญาณเตือนครั้งแรก",
+        "covid_lead_before": "<strong>{days} วันก่อน</strong>",
+        "covid_lead_same": "ในช่วงเดียวกับ",
+        "covid_lead_after": "{days} วันก่อน",
+        "covid_lead_suffix": "VIX แตะจุดสูงสุด",
+        "covid_peak": "VIX แตะจุดสูงสุด",
+        "covid_peak_desc": "เมื่อ {date}",
+        "covid_drawdown": "S&P 500 ตกลง",
+        "covid_drawdown_desc": "จาก peak ถึง trough ในช่วงนี้",
+        "covid_signals": "จำนวนสัญญาณเตือน",
+        "covid_signals_desc": "ตลอด ก.พ. - มิ.ย. 2020",
+        "covid_msg": "<strong>นี่คือสิ่งที่ระบบควรทำได้</strong> — เตือนล่วงหน้าก่อนวิกฤตจริง<br>กรณี COVID-19 ระบบส่งสัญญาณวันที่ <strong>{first_sig}</strong> {lead}จุดที่ VIX แตะ peak<br><br>หากนักลงทุนเชื่อสัญญาณ → ออกจากตลาดเป็นเงินสด → หลีกเลี่ยง drawdown <strong>{drawdown}%</strong> ภายใน 1 เดือน<br><br><em>แม้ ML forecasting ไม่แม่น แต่ rule-based detector (VIX > 30 + vol spike) ทำงานได้จริงในวิกฤต</em>",
+
+        # Animated + 3D
+        "anim_h2": "🎬 Animated Timeline",
+        "anim_tag": "กดปุ่ม <strong>▶️ Play</strong> ดู VIX เคลื่อนไหวตามเดือนตลอด {years} ปี — เห็นทุกวิกฤตที่ผ่านมา (COVID, สงครามรัสเซีย-ยูเครน, เงินเฟ้อ 2022)",
+        "anim_speech": "ลองสังเกตว่า VIX <strong>พุ่งทุกครั้งที่มี black swan event</strong>: ก.พ. 2020 (COVID), ก.พ. 2022 (สงคราม), ก.ย. 2022 (Fed ขึ้นดอกเบี้ย) Pattern ซ้ำๆ ที่เราพยายามจับ",
+        "threed_h2": "🌐 3D Visualization",
+        "threed_tag": "Scatter 3 มิติ: <strong>เวลา × S&P daily return × VIX</strong> หมุนด้วย mouse drag · Scroll zoom",
+        "threed_speech": "<strong>Cluster ที่สังเกตได้</strong>: จุดแดง (VIX สูง) มักอยู่ในวันที่ S&P ลงแรง > 3% — ยืนยัน <strong>negative correlation</strong> ระหว่าง VIX กับ S&P return (มักอยู่ที่ -0.7 ถึง -0.8)",
+
+        # Backtest
+        "bt_h2": "💰 Backtest: กลยุทธ์ทำกำไรได้หรือไม่?",
+        "bt_tag": "Simulation ย้อนหลัง {years} ปี — เริ่มทุน 1 ล้านบาท เปรียบเทียบ \"กลยุทธ์ของเรา\" vs \"Buy & Hold\" (รวม transaction cost {tx} bps)",
+        "bt_strategy_label": "กลยุทธ์ Black Swan",
+        "bt_baseline_label": "Buy & Hold (เปรียบเทียบ)",
+        "bt_initial": "เริ่มต้น 1,000,000 บาท",
+        "bt_return": "ผลตอบแทน",
+        "bt_mdd": "Max Drawdown",
+        "bt_strategy_fees": "💰 รวมค่าธรรมเนียมเทรด {n} ครั้ง ({tx} bps/turn) — ใกล้เคียงสภาพจริง",
+        "bt_equity_h3": "📈 Equity Curve เปรียบเทียบ",
+        "bt_dd_h3": "📉 Drawdown ใครต่ำกว่า?",
+        "bt_dd_tag": "ลึกน้อย = เจ็บน้อย กลยุทธ์ที่ดีควรมี drawdown ตื้นกว่า benchmark",
+        "bt_signal_h3": "🚨 สัญญาณเตือนเกิดเมื่อไหร่?",
+        "bt_signal_tag": "จุดสามเหลี่ยมแดง = วันที่ rule-based detector ส่งสัญญาณ",
+        "bt_win_msg": "🎉 กลยุทธ์ <strong>ชนะ</strong> Buy & Hold! ได้กำไรมากกว่า <strong>{diff:,.0f} บาท</strong> + drawdown ตื้นกว่าในช่วงตลาดตก",
+        "bt_lose_msg": "❌ กลยุทธ์ <strong>แพ้</strong> Buy & Hold ในช่วงนี้ — เพราะ {years} ปีที่ผ่านมาตลาดเป็น bull market ระบบป้องกันจึงเสียกำไรจากการอยู่นอกตลาดในช่วง up trend<br><br>กลยุทธ์นี้จะ shine ในช่วงวิกฤตจริง เช่น COVID-2020 หรือ Subprime 2008",
+
+        # Multi-asset
+        "multi_h2": "🌍 Multi-Asset Volatility",
+        "multi_tag": "เทียบ realized volatility ข้าม asset class: US equity, crypto, ทอง, ตลาดเกิดใหม่ — ถ้าทุก asset วุ่นวายพร้อมกัน = systemic crisis",
+        "multi_chart_title": "Volatility across asset classes",
+        "multi_x": "วันที่",
+        "multi_y": "Volatility (VIX or realized vol proxy)",
+        "multi_speech": "Bitcoin มี realized vol สูงกว่า S&P 500 ประมาณ 3-5 เท่า ขณะที่ <strong>ทอง</strong> เป็น \"safe haven\" — มัก uncorrelated หรือ negatively correlated กับ equity ในช่วงวิกฤต<br><br>ถ้าเห็น <strong>ทุก asset spike พร้อมกัน</strong> = สัญญาณ systemic risk (เช่น COVID-2020 ที่ทุก asset ตกพร้อมกัน รวมถึงทอง)",
+
+        # Final summary
+        "final_h2": "📖 บทสรุป",
+        "final_now": "🌡️ <strong>สภาพตลาดวันนี้</strong>",
+        "final_forecast": "🔮 <strong>คาดการณ์ 7 วันข้างหน้า</strong>",
+        "final_use": "💡 <strong>ระบบนี้ใช้ทำอะไรได้</strong>",
+        "final_use_text": "Early warning system สำหรับ market regime change รวม 3 signals: news sentiment (FinBERT) + ML forecast + rule-based crisis detector ไม่ใช่ระบบทำนายอนาคต 100% แต่ช่วย <strong>ลด drawdown</strong> ในช่วงวิกฤตได้",
+        "disclaimer": "<strong>⚠️ Disclaimer</strong><br>โปรเจกต์เพื่อ <strong>การศึกษาและวิจัย</strong> เท่านั้น <strong>ไม่ใช่คำแนะนำการลงทุน</strong> — ผลในอดีตไม่การันตีอนาคต ตลาดอาจ irrational ได้นานกว่าที่คุณ solvent อยู่",
+
+        # Tech
+        "tech_label": "สำหรับ engineer / data scientist",
+        "tech_h3": "📊 ตัวเลขเชิงเทคนิค",
+        "tech_methodology_h3": "📐 Methodology",
+        "tech_source": "Full source code:",
+
+        # Footer
+        "footer": "🚨 สร้างโดย <a href=\"https://github.com/oomNoNe/black-swan-indicator\">black-swan-indicator</a> · auto-rebuild ทุกสัปดาห์ผ่าน GitHub Actions · <a href=\"https://github.com/oomNoNe/black-swan-indicator/blob/main/README.th.md\">README ภาษาไทย</a>",
+
+        # Regime labels
+        "regime_bull": "Trending Bull",
+        "regime_bull_desc": "ตลาด uptrend — SMA-50 > SMA-200 และ vol ต่ำ",
+        "regime_panic": "Panic",
+        "regime_panic_desc": "ตลาด downtrend + vol สูง — สัญญาณวิกฤต",
+        "regime_ranging": "Ranging",
+        "regime_ranging_desc": "ตลาด sideways — รอ breakout",
+        "regime_unknown": "Unknown",
+        "regime_unknown_desc": "ข้อมูลไม่พอ",
+
+        # Logs (printed to console)
+        "log_1": "📊 [1/9] โหลด macro data (cache 1h)...",
+        "log_2": "📊 [2/9] วิเคราะห์ market regime...",
+        "log_3": "🤖 [3/9] โหลด/เทรน XGBoost (cache 24h)...",
+        "log_4": "📈 [4/9] Walk-forward validation (cache 24h)...",
+        "log_5": "⚔️ [5/9] Model comparison (cache 24h)...",
+        "log_6": "🔍 [6/9] SHAP values (cache 24h)...",
+        "log_7": "💰 [7/9] Backtest with transaction costs...",
+        "log_8": "🌍 [8/9] Multi-asset (cache 1h each)...",
+        "log_9": "📚 [9/9] COVID-2020 case study...",
+        "log_render": "📝 กำลังเขียน HTML report ({lang})...",
+        "log_saved": "✅ Report saved:",
+    },
+
+    "en": {
+        # Header
+        "html_lang": "en",
+        "title": "🚨 Black Swan Risk Indicator — Live Report",
+        "hero_h1": "🚨 Black Swan Risk Indicator",
+        "hero_sub": "Early-warning system for financial market crises · NLP sentiment + ML forecasting + regime detection",
+        "updated_label": "📅 Last updated:",
+        "data_window": "📊 {years} years of data",
+        "code_link": "View source on GitHub →",
+        "lang_switch_label": "🌐 Languages:",
+        "lang_other_label": "ภาษาไทย",
+        "lang_other_href": "index.html",
+
+        # Section 1
+        "sec1_h2": "🌤️ Today's Market Snapshot",
+        "sec1_tag": "30-second overview — key indicators investors watch + regime interpretation",
+
+        # Hero status
+        "hero_safe_title": "Low Risk — Markets in Normal Mode",
+        "hero_safe_sub": "Low VIX + Trending Bull regime → standard investment strategies remain viable",
+        "hero_caution_title": "Moderate Risk — Monitor Closely",
+        "hero_caution_sub": "VIX elevated or regime ranging → keep close watch on indicators",
+        "hero_danger_title": "High Risk — Crisis Signals Active",
+        "hero_danger_sub": "VIX > 30 or Panic regime → consider reducing risk exposure",
+
+        # Top facts
+        "fact_vix_label": "Current VIX",
+        "fact_regime_label": "Market Regime",
+        "fact_sp500_label": "S&P 500",
+        "fact_sp500_desc": "Top 500 US listed companies index",
+
+        # Section 2 — VIX
+        "sec2_h2": "🌡️ VIX — The Market Fear Index",
+        "sec2_tag": "CBOE Volatility Index — derived from S&P 500 option implied volatility, 30-day horizon",
+        "vix_explainer": """
+        <div class="simple-list">
+            <ul>
+                <li><strong>VIX < 15</strong> = very calm (possibly complacent)</li>
+                <li><strong>VIX 15-20</strong> = normal bull market range</li>
+                <li><strong>VIX 20-30</strong> = investors getting nervous</li>
+                <li><strong>VIX 30-40</strong> = crisis signal (2018 rate hikes, 2022 inflation)</li>
+                <li><strong>VIX > 40</strong> = full crisis — all-time peak: <strong>82.69</strong> (Mar 16, 2020 COVID)</li>
+            </ul>
+        </div>
+        """,
+        "sec2_chart_title": "📈 VIX history + AI forecast (7-day ahead)",
+        "sec2_chart_caption": "💡 <strong>How to read</strong>: Blue line = actual VIX · Dotted orange = 20-day moving average · Red star = XGBoost's prediction for VIX 7 trading days from now",
+
+        # Section 3 — Forecast
+        "sec3_h2": "🔮 ML Forecast: 7-Day VIX Prediction",
+        "sec3_tag": "XGBoost trained on VIX lag features + macro indicators (yield curve, gold, oil, DXY) — but check accuracy in the next section before trusting",
+        "forecast_up_label": "Forecast: VIX rising",
+        "forecast_up_msg": "Model expects VIX at {pred:.1f} (delta {delta:+.1f} from today) — heightened risk monitoring advised",
+        "forecast_flat_label": "Forecast: VIX flat",
+        "forecast_flat_msg": "VIX expected near {pred:.1f}, close to current level — stable conditions",
+        "forecast_down_label": "Forecast: VIX falling",
+        "forecast_down_msg": "VIX expected to drop to {pred:.1f} (delta {delta:.1f}) — easing signal",
+        "forecast_speech": "<strong>Important caveat</strong>: VIX is notoriously difficult to forecast — even academic papers regularly report R² near zero. Treat this as a <em>directional signal</em>, not a precise number. See accuracy section below for the honest assessment.",
+
+        # Section 4 — Accuracy
+        "sec4_h2": "🎯 But... How Accurate Is It?",
+        "sec4_tag": "Evaluated with <strong>walk-forward cross-validation</strong> (TimeSeriesSplit) — the gold standard for time-series ML that prevents look-ahead bias",
+        "accuracy_explainer": """
+        <div class="simple-list">
+            <ul>
+                <li><strong>R²</strong> (R-squared) = how much better the model explains variance vs predicting the mean</li>
+                <li><strong>R² = 1.0</strong> = perfect prediction (never happens in practice)</li>
+                <li><strong>R² = 0</strong> = same as predicting the mean — useless</li>
+                <li><strong>R² negative</strong> = worse than predicting the mean — model is harmful</li>
+            </ul>
+        </div>
+        """,
+        "acc_good_msg": "Model has meaningful predictive power — outperforms random",
+        "acc_ok_msg": "Model slightly better than random — marginal value",
+        "acc_bad_msg": "Model <strong>cannot beat the mean prediction</strong> — consistent with the <strong>Random Walk Hypothesis</strong> (Fama, Nobel 2013). Markets contain enough randomness that ML often underperforms simple baselines on volatility forecasting.",
+
+        # Section 5 — Model Comparison
+        "sec5_h2": "⚔️ Model Comparison",
+        "sec5_tag": "Tested 4 ML models + 1 Naive baseline with walk-forward CV — who wins at VIX forecasting?",
+        "models_list": """
+        <div class="simple-list">
+            <ul>
+                <li><strong>👶 Naive baseline</strong>: persistence model — predicts \"VIX in 7d = VIX today\" (no ML)</li>
+                <li><strong>🌲 XGBoost</strong>: gradient-boosted trees, regularized (max_depth=3, n_estimators=100)</li>
+                <li><strong>💡 LightGBM</strong>: fast tree-based with leaf-wise growth</li>
+                <li><strong>📐 Ridge</strong>: linear regression with L2 regularization</li>
+                <li><strong>🧠 LSTM</strong>: 1-layer PyTorch LSTM (32 hidden units, dropout 0.2)</li>
+            </ul>
+        </div>
+        """,
+        "winner_label": "Winner",
+        "winner_desc": "Highest R² in this evaluation",
+        "loser_label": "Worst",
+        "loser_desc": "Lowest R² in this round",
+        "cmp_naive_wins": "<strong>Surprise! Naive baseline beats every ML model</strong><br><br>The \"VIX in 7d = VIX today\" model (R² = {naive_score:.3f}) beats XGBoost, LightGBM, Ridge, and LSTM. This is the <strong>Random Walk Hypothesis</strong> in finance — asset prices move stochastically, making short-term prediction extremely difficult.<br><br><strong>Engineering lesson</strong>: Always test naive baselines first. If your ML doesn't beat persistence, don't deploy it.",
+        "cmp_ml_wins": "<strong>{best_model}</strong> wins this task (R² = {best_score:.3f}). We included the <strong>Naive baseline</strong> as a reference — any production ML model should beat persistence, otherwise it's not worth deploying.",
+
+        # Section 6 — SHAP
+        "sec6_h2": "🔍 SHAP: What Drives Model Decisions?",
+        "sec6_tag": "<strong>SHAP (SHapley Additive exPlanations)</strong> uses game theory to attribute predictions to features — the gold standard for interpretable AI",
+        "shap_explainer": """
+        <div class="simple-list">
+            <ul>
+                <li>🎯 SHAP values derived from <strong>Shapley values</strong> (Nobel Economics 1953)</li>
+                <li>📊 Shows each feature's marginal contribution to a prediction</li>
+                <li>✅ <strong>Fair & consistent</strong> — superior to XGBoost's built-in feature_importance</li>
+                <li>🔍 Useful for debugging model behavior</li>
+            </ul>
+        </div>
+        """,
+        "shap_top_msg": "Model relies most heavily on <strong>{top_feat}</strong> — this is the dominant signal driving predictions",
+
+        # COVID
+        "covid_h2": "🦠 Case Study: COVID-19 Crash 2020",
+        "covid_tag": "Real-world example — did our rule-based system catch the biggest crisis in a decade?",
+        "covid_first_signal": "First signal fired",
+        "covid_lead_before": "<strong>{days} days before</strong>",
+        "covid_lead_same": "around",
+        "covid_lead_after": "{days} days before",
+        "covid_lead_suffix": "VIX peaked",
+        "covid_peak": "VIX peak",
+        "covid_peak_desc": "on {date}",
+        "covid_drawdown": "S&P 500 drawdown",
+        "covid_drawdown_desc": "peak-to-trough during this window",
+        "covid_signals": "Total signals fired",
+        "covid_signals_desc": "throughout Feb-Jun 2020",
+        "covid_msg": "<strong>This is what the system is supposed to do</strong> — warn before the crisis fully unfolds.<br>For COVID-19, the first signal fired on <strong>{first_sig}</strong> {lead} the VIX peak.<br><br>An investor who acted on the signal → exited to cash → avoided ~<strong>{drawdown}%</strong> drawdown in 1 month.<br><br><em>Even though ML forecasting performed poorly, the rule-based detector (VIX > 30 + vol spike) worked in practice during a real crisis.</em>",
+
+        # Animated + 3D
+        "anim_h2": "🎬 Animated Timeline",
+        "anim_tag": "Click <strong>▶️ Play</strong> to watch VIX evolve month-by-month over {years} years — every crisis is visible (COVID, Russia-Ukraine war, 2022 inflation)",
+        "anim_speech": "Notice how VIX <strong>spikes during every black swan event</strong>: Feb 2020 (COVID), Feb 2022 (Russia war), Sep 2022 (Fed rate hikes). This is the recurring pattern we try to detect.",
+        "threed_h2": "🌐 3D Visualization",
+        "threed_tag": "3D scatter: <strong>time × S&P daily return × VIX</strong> — drag with mouse to rotate · scroll to zoom",
+        "threed_speech": "<strong>Observable cluster</strong>: red points (high VIX) tend to coincide with days when S&P fell > 3% — confirming the well-known <strong>negative correlation</strong> between VIX and S&P returns (typically -0.7 to -0.8).",
+
+        # Backtest
+        "bt_h2": "💰 Backtest: Is the Strategy Profitable?",
+        "bt_tag": "Historical simulation over {years} years — start with $1M, compare \"Black Swan Strategy\" vs \"Buy & Hold\" (including {tx} bps transaction costs)",
+        "bt_strategy_label": "Black Swan Strategy",
+        "bt_baseline_label": "Buy & Hold (baseline)",
+        "bt_initial": "Initial $1,000,000",
+        "bt_return": "Total return",
+        "bt_mdd": "Max Drawdown",
+        "bt_strategy_fees": "💰 Includes {n} trades with {tx} bps cost per turnover — realistic conditions",
+        "bt_equity_h3": "📈 Equity Curve Comparison",
+        "bt_dd_h3": "📉 Which strategy has shallower drawdown?",
+        "bt_dd_tag": "Less depth = less pain. A good strategy should have shallower drawdown than the benchmark.",
+        "bt_signal_h3": "🚨 When did signals fire?",
+        "bt_signal_tag": "Red triangle markers = days the rule-based detector flagged risk",
+        "bt_win_msg": "🎉 Strategy <strong>beats</strong> Buy & Hold! Earned <strong>${diff:,.0f}</strong> more + shallower drawdown during sell-offs.",
+        "bt_lose_msg": "❌ Strategy <strong>underperforms</strong> Buy & Hold in this window — because the past {years} years were a bull market, defensive systems sacrifice upside by sitting in cash during rallies.<br><br>The strategy's value emerges during actual crises like COVID-2020 or 2008.",
+
+        # Multi-asset
+        "multi_h2": "🌍 Multi-Asset Volatility",
+        "multi_tag": "Realized volatility across asset classes: US equity, crypto, gold, emerging markets — if all assets spike together = systemic crisis",
+        "multi_chart_title": "Volatility across asset classes",
+        "multi_x": "Date",
+        "multi_y": "Volatility (VIX or realized vol proxy)",
+        "multi_speech": "Bitcoin's realized volatility is typically 3-5× higher than S&P 500. <strong>Gold</strong> acts as a \"safe haven\" — often uncorrelated or negatively correlated with equities during crises.<br><br>If <strong>all assets spike together</strong> = systemic risk signal (e.g., COVID-2020, when even gold fell briefly).",
+
+        # Final summary
+        "final_h2": "📖 Bottom Line",
+        "final_now": "🌡️ <strong>Today's market</strong>",
+        "final_forecast": "🔮 <strong>7-day forecast</strong>",
+        "final_use": "💡 <strong>What this system does</strong>",
+        "final_use_text": "An early-warning system for market regime changes. Combines 3 signals: news sentiment (FinBERT) + ML forecast + rule-based crisis detector. It does NOT predict the future with certainty — but it helps <strong>reduce drawdowns</strong> during crises.",
+        "disclaimer": "<strong>⚠️ Disclaimer</strong><br>This is an <strong>educational and research project</strong> — <strong>not financial advice</strong>. Past performance does not guarantee future results. Markets can stay irrational longer than you can stay solvent.",
+
+        # Tech
+        "tech_label": "For engineers / data scientists",
+        "tech_h3": "📊 Technical Numbers",
+        "tech_methodology_h3": "📐 Methodology",
+        "tech_source": "Full source code:",
+
+        # Footer
+        "footer": "🚨 Built by <a href=\"https://github.com/oomNoNe/black-swan-indicator\">black-swan-indicator</a> · auto-rebuilt weekly via GitHub Actions · <a href=\"https://github.com/oomNoNe/black-swan-indicator/blob/main/README.md\">English README</a>",
+
+        # Regime labels
+        "regime_bull": "Trending Bull",
+        "regime_bull_desc": "Uptrend — SMA-50 > SMA-200 and low volatility",
+        "regime_panic": "Panic",
+        "regime_panic_desc": "Downtrend + high volatility — crisis signal",
+        "regime_ranging": "Ranging",
+        "regime_ranging_desc": "Sideways — waiting for breakout",
+        "regime_unknown": "Unknown",
+        "regime_unknown_desc": "Insufficient data",
+
+        # Logs
+        "log_1": "📊 [1/9] Loading macro data (cache 1h)...",
+        "log_2": "📊 [2/9] Analyzing market regime...",
+        "log_3": "🤖 [3/9] Loading/training XGBoost (cache 24h)...",
+        "log_4": "📈 [4/9] Walk-forward validation (cache 24h)...",
+        "log_5": "⚔️ [5/9] Model comparison (cache 24h)...",
+        "log_6": "🔍 [6/9] SHAP values (cache 24h)...",
+        "log_7": "💰 [7/9] Backtest with transaction costs...",
+        "log_8": "🌍 [8/9] Multi-asset (cache 1h each)...",
+        "log_9": "📚 [9/9] COVID-2020 case study...",
+        "log_render": "📝 Rendering HTML report ({lang})...",
+        "log_saved": "✅ Report saved:",
+    },
+}
 
 
 # ==========================================================
 # HELPERS
 # ==========================================================
 def fig_to_html(fig):
-    return fig.to_html(
-        full_html=False,
-        include_plotlyjs='cdn',
-        config={'displayModeBar': False, 'responsive': True}
-    )
+    return fig.to_html(full_html=False, include_plotlyjs='cdn',
+                       config={'displayModeBar': False, 'responsive': True})
 
 
 def big_status(emoji, title, subtitle, color):
@@ -99,8 +509,27 @@ def speech_bubble(emoji, text):
     """
 
 
+def vix_level_emoji(vix):
+    if vix < 15: return "😎", "#00cc96"
+    if vix < 20: return "☀️", "#00cc96"
+    if vix < 25: return "⛅", "#FFA15A"
+    if vix < 30: return "🌤️", "#FFA15A"
+    if vix < 40: return "⛈️", "#EF553B"
+    return "🌪️", "#EF553B"
+
+
+def regime_info(regime, t):
+    info = {
+        "Trending Bull": ("📈", t["regime_bull"], t["regime_bull_desc"], "#00cc96"),
+        "Panic": ("🔥", t["regime_panic"], t["regime_panic_desc"], "#EF553B"),
+        "Ranging": ("⚖️", t["regime_ranging"], t["regime_ranging_desc"], "#FFA15A"),
+        "Unknown": ("❓", t["regime_unknown"], t["regime_unknown_desc"], "#888"),
+    }
+    return info.get(regime, ("❓", regime, "", "#888"))
+
+
 # ==========================================================
-# ANALYSIS (เหมือนเดิม)
+# ANALYSIS (data + models — language-agnostic)
 # ==========================================================
 def _train_forecaster(macro):
     fc = VIXForecaster("XGBoost")
@@ -108,44 +537,37 @@ def _train_forecaster(macro):
     return fc
 
 
-def run_analysis():
-    print("📊 [1/9] โหลด macro data (cache 1h)...")
+def run_analysis(t):
+    print(t["log_1"])
     macro = cache_dataframe(f"macro_{YEARS_LOOKBACK}y",
                             lambda: fetch_macro_data(years=YEARS_LOOKBACK),
                             ttl_hours=1.0)
     if macro is None or macro.empty:
-        raise RuntimeError("โหลด macro data ไม่ได้")
-    print(f"   ได้ {len(macro)} วัน")
+        raise RuntimeError("Could not load macro data")
 
-    print("📊 [2/9] วิเคราะห์อารมณ์ตลาด...")
+    print(t["log_2"])
     regime = classify_market_regime(macro)
-    print(f"   Regime: {regime}")
 
-    print("🤖 [3/9] โหลด/เทรน XGBoost (cache 24h)...")
+    print(t["log_3"])
     forecaster = cache_model(f"xgb_forecaster_{YEARS_LOOKBACK}y",
-                             lambda: _train_forecaster(macro),
-                             ttl_hours=24.0)
+                             lambda: _train_forecaster(macro), ttl_hours=24.0)
     predicted_vix = forecaster.predict_vix(macro)
     current_vix = float(macro['VIX'].iloc[-1])
-    print(f"   VIX: {current_vix:.2f} -> AI 7d: {predicted_vix:.2f}")
 
-    print("📈 [4/9] Walk-forward validation (cache 24h)...")
+    print(t["log_4"])
     wf_result = cache_pickle(f"wf_xgb_{YEARS_LOOKBACK}y_{WF_SPLITS}f",
                              lambda: walk_forward_validate(macro, "XGBoost",
                                                            task="regression",
                                                            n_splits=WF_SPLITS),
                              ttl_hours=24.0)
-    print(f"   R²: {wf_result['mean_score']:.3f}")
 
-    print("⚔️ [5/9] Model comparison (cache 24h)...")
+    print(t["log_5"])
     cmp_reg = cache_pickle(f"cmp_reg_{YEARS_LOOKBACK}y_{WF_SPLITS}f",
                            lambda: compare_models(macro, task="regression",
                                                   n_splits=WF_SPLITS),
                            ttl_hours=24.0)
-    winner = cmp_reg.sort_values('Mean Score', ascending=False).iloc[0]
-    print(f"   Winner: {winner['Model']} (R²={winner['Mean Score']:.3f})")
 
-    print("🔍 [6/9] SHAP values (cache 24h)...")
+    print(t["log_6"])
     clean_df, feat_cols, _ = build_features(macro, classification=False)
     shap_data = cache_pickle(f"shap_{YEARS_LOOKBACK}y",
                              lambda: compute_shap_values(
@@ -153,7 +575,7 @@ def run_analysis():
                              ttl_hours=24.0)
     shap_values, feat_names, X_sample = shap_data
 
-    print("💰 [7/9] Backtest (incl. transaction costs)...")
+    print(t["log_7"])
     bt = macro.copy()
     bt['Vol_20'] = bt['Close'].pct_change().rolling(20).std() * np.sqrt(252)
     bt['Vol_Median_252'] = bt['Vol_20'].rolling(252, min_periods=60).median()
@@ -163,7 +585,7 @@ def run_analysis():
     ).astype(int)
     bt_metrics = run_advanced_backtest(bt, transaction_cost_bps=TRANSACTION_COST_BPS)
 
-    print("🌍 [8/9] Multi-asset (cache 1h each)...")
+    print(t["log_8"])
     assets = {}
     for name in ["S&P 500", "Bitcoin", "Gold", "Emerging Markets (EEM)"]:
         safe_key = name.replace(" ", "_").replace("(", "").replace(")", "").replace("&", "")
@@ -173,8 +595,8 @@ def run_analysis():
         if df is not None and not df.empty:
             assets[name] = df
 
-    print("📚 [9/9] COVID-2020 case study...")
-    covid_data = build_covid_case_study(bt)
+    print(t["log_9"])
+    covid_data = build_covid_case_study(bt, t)
 
     return {
         'macro': macro, 'regime': regime, 'forecaster': forecaster,
@@ -186,99 +608,67 @@ def run_analysis():
     }
 
 
-# ==========================================================
-# COVID-19 CASE STUDY
-# ==========================================================
-def build_covid_case_study(bt_data):
-    """
-    ดู COVID-2020 — ระบบเตือนทันมั้ย?
-
-    Returns dict with:
-    - chart_html: Plotly figure ของช่วง COVID
-    - first_signal_date: วันแรกที่ระบบเตือน
-    - peak_vix_date: วันที่ VIX สูงสุด
-    - peak_vix: ค่า VIX สูงสุด
-    - drawdown_pct: S&P 500 ตกกี่ %
-    - signal_lead_days: ระบบเตือนล่วงหน้ากี่วันก่อน peak
-    """
-    # ถ้าข้อมูลไม่ครอบคลุม 2020-03 -> skip
+def build_covid_case_study(bt_data, t):
     start = pd.Timestamp("2020-02-01")
     end = pd.Timestamp("2020-06-30")
-
     covid = bt_data.loc[(bt_data.index >= start) & (bt_data.index <= end)].copy()
     if covid.empty or len(covid) < 30:
         return None
 
-    # หา peak VIX
     peak_idx = covid['VIX'].idxmax()
     peak_vix = float(covid['VIX'].max())
-
-    # หา first signal
     signals = covid[covid['Risk_Signal'] == 1]
     first_signal = signals.index[0] if not signals.empty else None
 
-    # หา max drawdown ของ S&P 500
     sp_peak = covid['Close'].iloc[0]
     sp_trough = covid['Close'].min()
     drawdown = ((sp_trough - sp_peak) / sp_peak) * 100
-
-    # ระยะเตือนล่วงหน้า
     lead_days = (peak_idx - first_signal).days if first_signal else None
 
-    # Build chart
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=covid.index, y=covid['Close'],
-        mode='lines', name='S&P 500',
-        line=dict(color='#1f77b4', width=2),
-        yaxis='y',
+        x=covid.index, y=covid['Close'], mode='lines', name='S&P 500',
+        line=dict(color='#1f77b4', width=2), yaxis='y',
         hovertemplate='<b>%{x|%d %b %Y}</b><br>S&P: %{y:,.0f}<extra></extra>'
     ))
     fig.add_trace(go.Scatter(
-        x=covid.index, y=covid['VIX'],
-        mode='lines', name='VIX (ความกลัว)',
-        line=dict(color='#EF553B', width=2, dash='dot'),
-        yaxis='y2',
+        x=covid.index, y=covid['VIX'], mode='lines',
+        name='VIX' if t["html_lang"] == "en" else 'VIX (ความกลัว)',
+        line=dict(color='#EF553B', width=2, dash='dot'), yaxis='y2',
         hovertemplate='<b>%{x|%d %b %Y}</b><br>VIX: %{y:.1f}<extra></extra>'
     ))
-
-    # Mark signals
     if not signals.empty:
+        signal_label = '🚨 Signal' if t["html_lang"] == "en" else '🚨 ระบบเตือน'
         fig.add_trace(go.Scatter(
-            x=signals.index, y=signals['Close'],
-            mode='markers', name='🚨 ระบบเตือน',
+            x=signals.index, y=signals['Close'], mode='markers', name=signal_label,
             marker=dict(color='red', size=12, symbol='triangle-down',
-                        line=dict(color='white', width=1)),
-            yaxis='y',
+                        line=dict(color='white', width=1)), yaxis='y',
             hovertemplate='<b>🚨 %{x|%d %b %Y}</b><br>S&P: %{y:,.0f}<extra></extra>'
         ))
-
-    # Annotation: first signal
     if first_signal:
+        ann_text = (f"🚨 First signal<br>{first_signal.strftime('%d %b %Y')}"
+                    if t["html_lang"] == "en"
+                    else f"🚨 เตือนครั้งแรก<br>{first_signal.strftime('%d %b %Y')}")
         fig.add_annotation(
             x=first_signal, y=covid.loc[first_signal, 'Close'],
-            text=f"🚨 เตือนครั้งแรก<br>{first_signal.strftime('%d %b %Y')}",
-            showarrow=True, arrowhead=2, arrowcolor="red",
-            ax=-80, ay=-60,
-            bgcolor="rgba(239,85,59,0.2)",
-            bordercolor="red", borderwidth=1,
-            font=dict(color="white"),
+            text=ann_text, showarrow=True, arrowhead=2, arrowcolor="red",
+            ax=-80, ay=-60, bgcolor="rgba(239,85,59,0.2)",
+            bordercolor="red", borderwidth=1, font=dict(color="white"),
         )
-
-    # Annotation: peak VIX
+    peak_ann = (f"⛈️ VIX peak {peak_vix:.0f}<br>{peak_idx.strftime('%d %b %Y')}"
+                if t["html_lang"] == "en"
+                else f"⛈️ VIX สูงสุด {peak_vix:.0f}<br>{peak_idx.strftime('%d %b %Y')}")
     fig.add_annotation(
-        x=peak_idx, y=peak_vix,
-        text=f"⛈️ VIX สูงสุด {peak_vix:.0f}<br>{peak_idx.strftime('%d %b %Y')}",
+        x=peak_idx, y=peak_vix, text=peak_ann,
         showarrow=True, arrowhead=2, arrowcolor="orange",
-        ax=80, ay=-30, yref='y2',
-        bgcolor="rgba(255,161,90,0.2)",
-        bordercolor="orange", borderwidth=1,
-        font=dict(color="white"),
+        ax=80, ay=-30, yref='y2', bgcolor="rgba(255,161,90,0.2)",
+        bordercolor="orange", borderwidth=1, font=dict(color="white"),
     )
 
+    title = ("🦠 COVID-19 Crash (Feb - Jun 2020)" if t["html_lang"] == "en"
+             else "🦠 COVID-19 Crash (กุมภาพันธ์ - มิถุนายน 2020)")
     fig.update_layout(
-        title="🦠 COVID-19 Crash (กุมภาพันธ์ - มิถุนายน 2020)",
-        template="plotly_dark", hovermode="x unified", height=500,
+        title=title, template="plotly_dark", hovermode="x unified", height=500,
         xaxis=dict(title=None),
         yaxis=dict(title="S&P 500", side="left"),
         yaxis2=dict(title="VIX", side="right", overlaying="y",
@@ -289,10 +679,8 @@ def build_covid_case_study(bt_data):
     )
 
     return {
-        'fig': fig,
-        'first_signal_date': first_signal,
-        'peak_vix_date': peak_idx,
-        'peak_vix': peak_vix,
+        'fig': fig, 'first_signal_date': first_signal,
+        'peak_vix_date': peak_idx, 'peak_vix': peak_vix,
         'drawdown_pct': float(drawdown),
         'signal_lead_days': lead_days,
         'n_signals': int(signals.shape[0]),
@@ -300,148 +688,96 @@ def build_covid_case_study(bt_data):
 
 
 # ==========================================================
-# HTML TEMPLATE — ELI5 (เด็ก 5 ขวบเข้าใจได้)
+# HTML TEMPLATE — bilingual via {placeholders}
 # ==========================================================
 HTML_TEMPLATE = """<!DOCTYPE html>
-<html lang="th">
+<html lang="{html_lang}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🚨 วันนี้ตลาดเสี่ยงแค่ไหน?</title>
+<title>{title}</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Sukhumvit Set", "Noto Sans Thai", sans-serif;
-    background: #0e1117; color: #fafafa; line-height: 1.8; font-size: 17px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Sukhumvit Set", "Noto Sans Thai", sans-serif;
+    background: #0e1117; color: #fafafa; line-height: 1.75; font-size: 16px;
   }}
-  .container {{ max-width: 980px; margin: 0 auto; padding: 32px 20px; }}
-
-  /* Hero header */
+  .container {{ max-width: 1040px; margin: 0 auto; padding: 32px 24px; }}
   header {{
-    text-align: center; padding: 40px 20px; margin-bottom: 32px;
+    text-align: center; padding: 44px 24px; margin-bottom: 32px;
     background: linear-gradient(135deg, rgba(31,119,180,0.08), rgba(239,85,59,0.08));
     border-radius: 16px;
   }}
-  h1 {{ font-size: 2.6rem; margin-bottom: 8px; }}
-  .hero-sub {{ color: #aaa; font-size: 1.15rem; }}
+  h1 {{ font-size: 2.5rem; margin-bottom: 10px; line-height: 1.2; }}
+  .hero-sub {{ color: #aaa; font-size: 1.1rem; max-width: 720px; margin: 0 auto; }}
   .meta-row {{
     display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
-    margin-top: 20px; font-size: 0.9rem; color: #888;
+    margin-top: 22px; font-size: 0.9rem; color: #888;
   }}
   .meta-row a {{ color: #1f77b4; text-decoration: none; }}
-
-  /* Section */
-  section {{ margin: 56px 0; }}
-  h2 {{
-    font-size: 1.8rem; margin-bottom: 16px;
-    display: flex; align-items: center; gap: 12px;
+  .meta-row a:hover {{ text-decoration: underline; }}
+  .lang-switch {{
+    display: inline-block; margin-top: 10px; padding: 6px 14px;
+    background: rgba(255,255,255,0.05); border-radius: 8px;
+    font-size: 0.9rem; color: #aaa;
   }}
-  .section-tagline {{ color: #aaa; font-size: 1.05rem; margin-bottom: 24px; }}
-  h3 {{ font-size: 1.3rem; margin: 28px 0 12px; color: #ddd; }}
-
-  /* Big status card */
-  .big-status {{
-    padding: 40px 32px; text-align: center; border-radius: 16px; margin: 24px 0;
-  }}
-  .big-emoji {{ font-size: 5rem; line-height: 1; margin-bottom: 16px; }}
-  .big-title {{ font-size: 2rem; font-weight: 700; margin-bottom: 8px; }}
-  .big-subtitle {{ font-size: 1.15rem; color: #ddd; }}
-
-  /* Fact cards */
+  .lang-switch a {{ color: #1f77b4; font-weight: 500; }}
+  section {{ margin: 52px 0; }}
+  h2 {{ font-size: 1.7rem; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; }}
+  .section-tagline {{ color: #aaa; font-size: 1rem; margin-bottom: 20px; }}
+  h3 {{ font-size: 1.2rem; margin: 24px 0 12px; color: #ddd; }}
+  .big-status {{ padding: 36px 28px; text-align: center; border-radius: 14px; margin: 20px 0; }}
+  .big-emoji {{ font-size: 4.5rem; line-height: 1; margin-bottom: 14px; }}
+  .big-title {{ font-size: 1.7rem; font-weight: 700; margin-bottom: 8px; }}
+  .big-subtitle {{ font-size: 1.05rem; color: #ddd; }}
   .facts-grid {{
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 16px; margin: 24px 0;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px; margin: 22px 0;
   }}
   .fact-card {{
-    background: rgba(255,255,255,0.04);
-    padding: 20px; border-radius: 12px;
-    display: flex; gap: 16px; align-items: flex-start;
+    background: rgba(255,255,255,0.04); padding: 18px; border-radius: 10px;
+    display: flex; gap: 14px; align-items: flex-start;
   }}
-  .fact-emoji {{ font-size: 2.4rem; line-height: 1; }}
-  .fact-content {{ flex: 1; }}
-  .fact-label {{ font-size: 0.9rem; color: #aaa; }}
-  .fact-value {{ font-size: 1.8rem; font-weight: 700; margin: 4px 0; }}
-  .fact-explain {{ font-size: 0.95rem; color: #bbb; }}
-
-  /* Speech bubble */
+  .fact-emoji {{ font-size: 2.2rem; line-height: 1; }}
+  .fact-label {{ font-size: 0.85rem; color: #aaa; }}
+  .fact-value {{ font-size: 1.6rem; font-weight: 700; margin: 4px 0; }}
+  .fact-explain {{ font-size: 0.92rem; color: #bbb; }}
   .speech-bubble {{
-    background: rgba(31,119,180,0.15);
-    border-left: 4px solid #1f77b4;
-    padding: 18px 22px; border-radius: 8px;
-    margin: 20px 0; display: flex; gap: 14px; align-items: flex-start;
+    background: rgba(31,119,180,0.12); border-left: 4px solid #1f77b4;
+    padding: 16px 20px; border-radius: 8px; margin: 18px 0;
+    display: flex; gap: 14px; align-items: flex-start;
   }}
-  .bubble-emoji {{ font-size: 1.8rem; line-height: 1; }}
-  .bubble-text {{ flex: 1; font-size: 1.05rem; line-height: 1.7; }}
+  .bubble-emoji {{ font-size: 1.6rem; line-height: 1; }}
+  .bubble-text {{ flex: 1; font-size: 1rem; line-height: 1.7; }}
   .bubble-text strong {{ color: #1f77b4; }}
-
-  /* Comparison cards */
   .compare-grid {{
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px; margin: 24px 0;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 22px 0;
   }}
-  @media (max-width: 700px) {{
-    .compare-grid {{ grid-template-columns: 1fr; }}
-  }}
-  .compare-card {{
-    padding: 24px; border-radius: 12px;
-    text-align: center;
-  }}
-  .compare-card.winner {{
-    background: rgba(0,204,150,0.12); border: 2px solid #00cc96;
-  }}
-  .compare-card.loser {{
-    background: rgba(239,85,59,0.08); border: 2px solid rgba(239,85,59,0.4);
-  }}
-  .compare-emoji {{ font-size: 3rem; }}
-  .compare-name {{ font-size: 1.3rem; font-weight: 700; margin: 8px 0; }}
-  .compare-num {{ font-size: 2.4rem; font-weight: 700; margin: 8px 0; }}
-  .compare-desc {{ color: #ccc; }}
-
-  /* Simple list */
-  .simple-list {{
-    background: rgba(255,255,255,0.03);
-    padding: 20px 28px; border-radius: 12px; margin: 20px 0;
-  }}
-  .simple-list li {{
-    margin: 12px 0; list-style: none; padding-left: 32px; position: relative;
-  }}
-  .simple-list li::before {{
-    content: "👉"; position: absolute; left: 0; top: 0;
-  }}
-
-  /* Chart container */
-  .chart-wrap {{
-    background: rgba(255,255,255,0.02);
-    padding: 16px; border-radius: 12px; margin: 20px 0;
-  }}
-
-  /* Final summary */
+  @media (max-width: 700px) {{ .compare-grid {{ grid-template-columns: 1fr; }} }}
+  .compare-card {{ padding: 22px; border-radius: 12px; text-align: center; }}
+  .compare-card.winner {{ background: rgba(0,204,150,0.12); border: 2px solid #00cc96; }}
+  .compare-card.loser {{ background: rgba(239,85,59,0.08); border: 2px solid rgba(239,85,59,0.4); }}
+  .compare-emoji {{ font-size: 2.6rem; }}
+  .compare-name {{ font-size: 1.2rem; font-weight: 700; margin: 6px 0; }}
+  .compare-num {{ font-size: 2.2rem; font-weight: 700; margin: 6px 0; }}
+  .compare-desc {{ color: #ccc; font-size: 0.95rem; }}
+  .simple-list {{ background: rgba(255,255,255,0.03); padding: 18px 26px; border-radius: 10px; margin: 18px 0; }}
+  .simple-list li {{ margin: 10px 0; list-style: none; padding-left: 28px; position: relative; }}
+  .simple-list li::before {{ content: "👉"; position: absolute; left: 0; top: 0; }}
+  .chart-wrap {{ background: rgba(255,255,255,0.02); padding: 14px; border-radius: 12px; margin: 18px 0; }}
   .final-summary {{
-    margin-top: 48px; padding: 32px;
-    background: linear-gradient(135deg, rgba(31,119,180,0.15), rgba(0,204,150,0.08));
-    border-radius: 16px;
+    margin-top: 48px; padding: 30px;
+    background: linear-gradient(135deg, rgba(31,119,180,0.13), rgba(0,204,150,0.07));
+    border-radius: 14px;
   }}
-  .final-summary h2 {{ margin-bottom: 24px; }}
-  .summary-item {{ margin: 16px 0; font-size: 1.1rem; line-height: 1.8; }}
-
+  .summary-item {{ margin: 14px 0; font-size: 1.05rem; line-height: 1.75; }}
   footer {{
-    margin-top: 64px; padding-top: 24px;
-    border-top: 1px solid rgba(255,255,255,0.1);
-    color: #888; font-size: 0.9rem; text-align: center;
+    margin-top: 56px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,0.1);
+    color: #888; font-size: 0.88rem; text-align: center;
   }}
   footer a {{ color: #1f77b4; text-decoration: none; }}
-
-  /* Toggle for nerds */
-  .nerd-mode {{
-    margin-top: 32px; padding: 16px;
-    background: rgba(255,255,255,0.03); border-radius: 8px;
-  }}
-  .nerd-mode summary {{
-    cursor: pointer; font-weight: 600; color: #aaa;
-    list-style: none; padding: 8px 0;
-  }}
+  .nerd-mode {{ margin-top: 28px; padding: 16px; background: rgba(255,255,255,0.03); border-radius: 8px; }}
+  .nerd-mode summary {{ cursor: pointer; font-weight: 600; color: #aaa; padding: 6px 0; list-style: none; }}
   .nerd-mode summary::-webkit-details-marker {{ display: none; }}
   .nerd-mode summary::before {{ content: "🤓 "; }}
   .nerd-mode[open] summary::before {{ content: "👇 "; }}
@@ -451,248 +787,128 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <div class="container">
 
 <header>
-  <h1>🚨 วันนี้ตลาดเสี่ยงแค่ไหน?</h1>
-  <p class="hero-sub">
-    ระบบเตือนภัยล่วงหน้าก่อนวิกฤตการเงิน — อธิบายง่ายๆ ไม่ต้องเก่งคณิตศาสตร์
-  </p>
+  <h1>{hero_h1}</h1>
+  <p class="hero-sub">{hero_sub}</p>
   <div class="meta-row">
-    <span>📅 อัพเดทล่าสุด: <strong>{timestamp}</strong></span>
-    <span>📊 ดูข้อมูลย้อนหลัง {years} ปี</span>
-    <span><a href="https://github.com/oomNoNe/black-swan-indicator" target="_blank">โค้ดทั้งหมดอยู่ที่นี่ →</a></span>
+    <span>{updated_label} <strong>{timestamp}</strong></span>
+    <span>{data_window_resolved}</span>
+    <span><a href="https://github.com/oomNoNe/black-swan-indicator" target="_blank">{code_link}</a></span>
+  </div>
+  <div class="lang-switch">
+    {lang_switch_label} <strong>{current_lang_name}</strong> · <a href="{lang_other_href}">{lang_other_label}</a>
   </div>
 </header>
 
-<!-- ============================================ -->
-<!-- SECTION 1: สรุปด่วน — วันนี้เสี่ยงแค่ไหน? -->
-<!-- ============================================ -->
 <section>
-  <h2>🌤️ วันนี้ตลาดเป็นยังไง?</h2>
-  <p class="section-tagline">
-    เริ่มจากภาพรวมง่ายๆ ก่อน เหมือนเปิดดูพยากรณ์อากาศตอนเช้า
-  </p>
-
+  <h2>{sec1_h2}</h2>
+  <p class="section-tagline">{sec1_tag}</p>
   {hero_status}
-
-  <div class="facts-grid">
-    {top_facts}
-  </div>
+  <div class="facts-grid">{top_facts}</div>
 </section>
 
-<!-- ============================================ -->
-<!-- SECTION 2: VIX = อุณหภูมิตลาด -->
-<!-- ============================================ -->
 <section>
-  <h2>🌡️ VIX คืออะไร? (อุณหภูมิตลาด)</h2>
-  <p class="section-tagline">
-    เหมือนเทอร์โมมิเตอร์วัดไข้ — แต่วัด "ความกลัว" ของนักลงทุนแทน
-  </p>
-
+  <h2>{sec2_h2}</h2>
+  <p class="section-tagline">{sec2_tag}</p>
   {vix_explainer}
-
   {speech_vix}
-
-  <h3>📈 อุณหภูมิตลาดย้อนหลังครึ่งปี</h3>
+  <h3>{sec2_chart_title}</h3>
   <div class="chart-wrap">{vix_chart}</div>
-  <p class="section-tagline">
-    💡 <strong>วิธีอ่าน</strong>: เส้นน้ำเงิน = ความกลัวจริง,
-    ดาวแดง = AI ทำนายว่าอีก 7 วันความกลัวจะเป็นเท่าไหร่
-  </p>
+  <p class="section-tagline">{sec2_chart_caption}</p>
 </section>
 
-<!-- ============================================ -->
-<!-- SECTION 3: AI หมอดูทำนายอะไร? -->
-<!-- ============================================ -->
 <section>
-  <h2>🔮 เรามีหมอดู AI ที่ทำนายตลาด</h2>
-  <p class="section-tagline">
-    เราเทรน AI ให้เรียนรู้จากอดีต 5 ปี แล้วให้มันทำนายอนาคต 7 วันข้างหน้า
-  </p>
-
+  <h2>{sec3_h2}</h2>
+  <p class="section-tagline">{sec3_tag}</p>
   {forecast_card}
-
   {speech_forecast}
 </section>
 
-<!-- ============================================ -->
-<!-- SECTION 4: หมอดู AI แม่นแค่ไหน? -->
-<!-- ============================================ -->
 <section>
-  <h2>🎯 แต่... AI แม่นจริงเหรอ?</h2>
-  <p class="section-tagline">
-    คำถามสำคัญ — เราเลยทดสอบ AI กับอดีต ดูว่าทำนายผ่านมาถูกบ่อยแค่ไหน
-  </p>
-
+  <h2>{sec4_h2}</h2>
+  <p class="section-tagline">{sec4_tag}</p>
   {accuracy_explainer}
-
   <div class="chart-wrap">{wf_chart}</div>
-
   {speech_accuracy}
 </section>
 
-<!-- ============================================ -->
-<!-- SECTION 5: AI 4 ตัวแข่งกัน -->
-<!-- ============================================ -->
 <section>
-  <h2>⚔️ มีหมอดู 4 คนแข่งกัน — ใครเก่งสุด?</h2>
-  <p class="section-tagline">
-    เราเอา AI 4 แบบมาแข่งกัน แต่ละแบบมีจุดเด่นต่างกัน
-  </p>
-
-  <div class="simple-list">
-    <ul>
-      <li><strong>👶 Naive</strong> = วิธีง่ายที่สุด — "เดาว่าพรุ่งนี้ = วันนี้" (เป็นมาตรฐานเทียบ)</li>
-      <li><strong>🌲 XGBoost</strong> = ต้นไม้การตัดสินใจ (ฉลาด ใช้กันมากใน Kaggle)</li>
-      <li><strong>💡 LightGBM</strong> = ต้นไม้แบบเร็ว (น้องของ XGBoost)</li>
-      <li><strong>📐 Ridge</strong> = สมการคณิตศาสตร์เรียบง่าย (ไม่ฉลาด แต่เสถียร)</li>
-      <li><strong>🧠 LSTM</strong> = สมองเลียนแบบมนุษย์ (Deep Learning)</li>
-    </ul>
-  </div>
-
+  <h2>{sec5_h2}</h2>
+  <p class="section-tagline">{sec5_tag}</p>
+  {models_list}
   <div class="chart-wrap">{cmp_chart}</div>
-
   {compare_winner_loser}
-
   {speech_compare}
 </section>
 
-<!-- ============================================ -->
-<!-- SECTION 6: AI ดูอะไรเป็นพิเศษ -->
-<!-- ============================================ -->
 <section>
-  <h2>🔍 AI ดูอะไรเป็นพิเศษ?</h2>
-  <p class="section-tagline">
-    เหมือนเชฟทำต้มยำ — ขอเปิดสูตรว่าใส่วัตถุดิบไหนเยอะที่สุด
-  </p>
-
+  <h2>{sec6_h2}</h2>
+  <p class="section-tagline">{sec6_tag}</p>
   {shap_explainer}
-
   <div class="chart-wrap">{shap_chart}</div>
-
   {speech_shap}
 </section>
 
-<!-- ============================================ -->
-<!-- SECTION COVID — Case Study -->
-<!-- ============================================ -->
 {covid_section}
 
-<!-- ============================================ -->
-<!-- SECTION 7: ทดลองเล่นในอดีต -->
-<!-- ============================================ -->
 <section>
-  <h2>💰 ถ้าใช้ระบบนี้จริง จะได้กำไรมั้ย?</h2>
-  <p class="section-tagline">
-    เราทดลองย้อนหลัง 5 ปี — ถ้ามีเงิน 1 ล้านบาท ใช้กลยุทธ์นี้
-    จะได้เท่าไหร่ เทียบกับการซื้อแล้วถือเฉยๆ
-  </p>
-
-  {backtest_cards}
-
-  <h3>📈 เงินทุนเติบโตยังไงในช่วง {years} ปี?</h3>
-  <div class="chart-wrap">{equity_chart}</div>
-
-  <h3>📉 เคยขาดทุนหนักแค่ไหน?</h3>
-  <p class="section-tagline">
-    ยิ่งกราฟลงลึก = เจ็บหนัก กลยุทธ์ที่ดี ควรมี "หลุม" ตื้นกว่า
-  </p>
-  <div class="chart-wrap">{dd_chart}</div>
-
-  <h3>🚨 เคยส่งสัญญาณเตือนเมื่อไหร่บ้าง?</h3>
-  <p class="section-tagline">
-    จุดสามเหลี่ยมแดง = เวลาที่ระบบบอกว่า "ระวัง! ตลาดอาจจะตก"
-  </p>
-  <div class="chart-wrap">{signal_chart}</div>
-
-  {speech_backtest}
-</section>
-
-<!-- ============================================ -->
-<!-- SECTION ANIMATED + 3D -->
-<!-- ============================================ -->
-<section>
-  <h2>🎬 ดู VIX เปลี่ยนแปลงตามเวลา</h2>
-  <p class="section-tagline">
-    กดปุ่ม <strong>▶️ Play</strong> ดูประวัติ VIX ตั้งแต่ {years} ปีที่แล้ว — เห็นช่วง COVID, สงคราม,
-    การขึ้นดอกเบี้ย ได้ทั้งหมด
-  </p>
+  <h2>{anim_h2}</h2>
+  <p class="section-tagline">{anim_tag_resolved}</p>
   <div class="chart-wrap">{animated_chart}</div>
   {speech_animated}
 </section>
 
 <section>
-  <h2>🌐 3D — มองตลาดจากมุมใหม่</h2>
-  <p class="section-tagline">
-    เห็นความสัมพันธ์ระหว่าง <strong>เวลา × ผลตอบแทน × ความกลัว</strong> พร้อมกัน
-    หมุนกราฟด้วย mouse — drag, scroll เพื่อ zoom
-  </p>
+  <h2>{threed_h2}</h2>
+  <p class="section-tagline">{threed_tag}</p>
   <div class="chart-wrap">{volatility_3d_chart}</div>
-  {speech_3d}
+  {speech_threed}
 </section>
 
-<!-- ============================================ -->
-<!-- SECTION 8: ตลาดทั่วโลก -->
-<!-- ============================================ -->
 <section>
-  <h2>🌍 ตลาดอื่นเป็นยังไงบ้าง?</h2>
-  <p class="section-tagline">
-    ดูทุกตลาดทั่วโลกพร้อมกัน — Bitcoin, ทอง, ตลาดเกิดใหม่
-    ถ้าทุกอย่างวุ่นวายพร้อมกัน = วิกฤตจริงๆ
-  </p>
+  <h2>{bt_h2}</h2>
+  <p class="section-tagline">{bt_tag_resolved}</p>
+  {backtest_cards}
+  <h3>{bt_equity_h3}</h3>
+  <div class="chart-wrap">{equity_chart}</div>
+  <h3>{bt_dd_h3}</h3>
+  <p class="section-tagline">{bt_dd_tag}</p>
+  <div class="chart-wrap">{dd_chart}</div>
+  <h3>{bt_signal_h3}</h3>
+  <p class="section-tagline">{bt_signal_tag}</p>
+  <div class="chart-wrap">{signal_chart}</div>
+  {speech_backtest}
+</section>
 
+<section>
+  <h2>{multi_h2}</h2>
+  <p class="section-tagline">{multi_tag}</p>
   <div class="chart-wrap">{multi_asset_chart}</div>
-
   {speech_multi_asset}
 </section>
 
-<!-- ============================================ -->
-<!-- FINAL SUMMARY -->
-<!-- ============================================ -->
 <div class="final-summary">
-  <h2>📖 สรุปง่ายๆ</h2>
-
-  <div class="summary-item">
-    <strong>🌡️ ตอนนี้ตลาดเสี่ยงแค่ไหน?</strong><br>
-    {final_status}
-  </div>
-
-  <div class="summary-item">
-    <strong>🔮 อีก 7 วันจะเป็นยังไง?</strong><br>
-    {final_forecast}
-  </div>
-
-  <div class="summary-item">
-    <strong>💡 ระบบนี้ใช้ทำอะไรได้?</strong><br>
-    ช่วยส่งสัญญาณเตือนล่วงหน้าก่อนวิกฤตการเงิน
-    (เช่น ก่อนตลาดตก 30%) เพื่อให้นักลงทุนได้เตรียมตัว
-    ไม่ใช่ทำนายแม่นยำ 100% แต่ช่วยลดความเสียหายได้
-  </div>
-
-  <div class="summary-item" style="color: #FFA15A;">
-    <strong>⚠️ คำเตือน</strong><br>
-    นี่เป็น<strong>โปรเจกต์เพื่อการศึกษา</strong>เท่านั้น
-    ไม่ใช่คำแนะนำการลงทุน อย่าเอาเงินจริงไปใช้ตามนี้โดยไม่ปรึกษามืออาชีพ
-  </div>
+  <h2>{final_h2}</h2>
+  <div class="summary-item">{final_now}<br>{final_status}</div>
+  <div class="summary-item">{final_forecast}<br>{final_forecast_text}</div>
+  <div class="summary-item">{final_use}<br>{final_use_text}</div>
+  <div class="summary-item" style="color: #FFA15A;">{disclaimer}</div>
 </div>
 
-<!-- ============================================ -->
-<!-- NERD MODE -->
-<!-- ============================================ -->
 <details class="nerd-mode">
-  <summary>สำหรับคนที่อยากรู้ลึก (เทคนิคจริง)</summary>
-  <div style="padding: 16px 0; line-height: 1.8;">
-    <h3>📊 ตัวเลขเชิงเทคนิค</h3>
+  <summary>{tech_label}</summary>
+  <div style="padding: 14px 0; line-height: 1.8;">
+    <h3>{tech_h3}</h3>
     <ul style="padding-left: 24px;">
-      <li><strong>VIX ปัจจุบัน</strong>: {tech_vix}</li>
-      <li><strong>AI Forecast (7d)</strong>: {tech_pred} (XGBoost)</li>
+      <li><strong>VIX</strong>: {tech_vix}</li>
+      <li><strong>AI Forecast (7d, XGBoost)</strong>: {tech_pred}</li>
       <li><strong>Walk-Forward Mean R²</strong>: {tech_r2} ± {tech_r2_std} ({wf_splits} folds)</li>
       <li><strong>Best Model (regression)</strong>: {tech_best_model}</li>
-      <li><strong>Backtest Sharpe</strong>: Strategy {tech_strat_sharpe} vs Buy&Hold {tech_base_sharpe}</li>
-      <li><strong>Max Drawdown</strong>: Strategy {tech_strat_mdd}% vs Buy&Hold {tech_base_mdd}%</li>
+      <li><strong>Backtest Sharpe</strong>: Strategy {tech_strat_sharpe} vs B&H {tech_base_sharpe}</li>
+      <li><strong>Max Drawdown</strong>: Strategy {tech_strat_mdd}% vs B&H {tech_base_mdd}%</li>
       <li><strong>Transaction cost</strong>: {tx_cost} bps per turnover</li>
-      <li><strong>Features</strong>: 13 (VIX lags, S&P returns, yield curve, gold/oil/DXY momentum)</li>
+      <li><strong>Features</strong>: 13 (VIX lags, S&P returns, yield curve, gold/oil/DXY)</li>
     </ul>
-
-    <h3>📐 Methodology</h3>
+    <h3>{tech_methodology_h3}</h3>
     <ul style="padding-left: 24px;">
       <li>Time-series validation: TimeSeriesSplit, no shuffle (no look-ahead bias)</li>
       <li>FinBERT (ProsusAI) for news sentiment (separate Streamlit app)</li>
@@ -700,20 +916,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <li>Multi-asset volatility: realized vol 20d annualized (proxy for non-VIX assets)</li>
       <li>Regime: SMA-50/200 crossover + 20d rolling vol vs historical median</li>
     </ul>
-
-    <p style="margin-top: 16px;">
-      Full source code: <a href="https://github.com/oomNoNe/black-swan-indicator" target="_blank">github.com/oomNoNe/black-swan-indicator</a>
+    <p style="margin-top: 14px;">{tech_source}
+      <a href="https://github.com/oomNoNe/black-swan-indicator" target="_blank">github.com/oomNoNe/black-swan-indicator</a>
     </p>
   </div>
 </details>
 
-<footer>
-  <p>
-    🚨 สร้างโดย <a href="https://github.com/oomNoNe/black-swan-indicator">black-swan-indicator</a>
-    · อัพเดทอัตโนมัติทุกสัปดาห์ ·
-    <a href="https://github.com/oomNoNe/black-swan-indicator/blob/main/README.th.md">README ภาษาไทย</a>
-  </p>
-</footer>
+<footer><p>{footer}</p></footer>
 
 </div>
 </body>
@@ -722,431 +931,233 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 # ==========================================================
-# BUILD
+# BUILD (per language)
 # ==========================================================
-def vix_level_emoji(vix):
-    if vix < 15: return "😎", "ตลาดสงบมาก", "#00cc96"
-    if vix < 20: return "☀️", "ตลาดสบายๆ", "#00cc96"
-    if vix < 25: return "⛅", "เริ่มมีเมฆ", "#FFA15A"
-    if vix < 30: return "🌤️", "ต้องระวัง", "#FFA15A"
-    if vix < 40: return "⛈️", "อันตราย! ตลาดกลัวมาก", "#EF553B"
-    return "🌪️", "วิกฤต! ฟ้าผ่า!", "#EF553B"
-
-
-def regime_explanation(regime):
-    return {
-        "Trending Bull": ("📈", "ตลาดขาขึ้น", "หุ้นเฉลี่ยขึ้นมานาน — เหมือนวันแดดออก", "#00cc96"),
-        "Panic": ("🔥", "ตลาดวิกฤต", "หุ้นตก + ผันผวนแรง — เหมือนพายุ", "#EF553B"),
-        "Ranging": ("⚖️", "ตลาดออกข้าง", "ไม่ขึ้นไม่ลง — เหมือนวันเมฆครึ้ม", "#FFA15A"),
-        "Unknown": ("❓", "ข้อมูลไม่พอ", "ยังบอกไม่ได้", "#888"),
-    }.get(regime, ("❓", regime, "", "#888"))
-
-
-def build():
+def build(lang="th"):
+    t = S[lang]
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    data = run_analysis()
+    output_file = OUTPUT_DIR / LANG_FILENAMES[lang]
 
-    print("\n📝 กำลังเขียน HTML report (แบบเด็ก 5 ขวบเข้าใจได้)...")
+    data = run_analysis(t)
+    print(t["log_render"].format(lang=lang))
 
-    # ===== Hero status =====
-    vix_emoji, vix_label, vix_color = vix_level_emoji(data['current_vix'])
-    regime_emoji, regime_label, regime_desc, regime_color = regime_explanation(data['regime'])
-
-    # คำนวณ overall risk level
-    if data['current_vix'] < 20 and data['regime'] == "Trending Bull":
-        overall_emoji = "☀️"
-        overall_title = "ปลอดภัย — วันแดดออก"
-        overall_subtitle = "ตลาดสบายๆ ลงทุนตามปกติได้ ความเสี่ยงต่ำ"
-        overall_color = "#00cc96"
-    elif data['current_vix'] > 30 or data['regime'] == "Panic":
-        overall_emoji = "⛈️"
-        overall_title = "อันตราย — พายุใกล้มา"
-        overall_subtitle = "ตลาดเริ่มกลัว — ระมัดระวังการลงทุน"
-        overall_color = "#EF553B"
+    # ---- Hero status ----
+    vix = data['current_vix']
+    if vix < 20 and data['regime'] == "Trending Bull":
+        hero_status = big_status("☀️", t["hero_safe_title"], t["hero_safe_sub"], "#00cc96")
+    elif vix > 30 or data['regime'] == "Panic":
+        hero_status = big_status("⛈️", t["hero_danger_title"], t["hero_danger_sub"], "#EF553B")
     else:
-        overall_emoji = "⛅"
-        overall_title = "ระวัง — เมฆเริ่มก่อตัว"
-        overall_subtitle = "ตลาดออกข้าง — ติดตามใกล้ชิด"
-        overall_color = "#FFA15A"
+        hero_status = big_status("⛅", t["hero_caution_title"], t["hero_caution_sub"], "#FFA15A")
 
-    hero_status = big_status(overall_emoji, overall_title, overall_subtitle, overall_color)
+    # ---- Top facts ----
+    vix_emoji, vix_color = vix_level_emoji(vix)
+    regime_emoji, regime_name, regime_desc, regime_color = regime_info(data['regime'], t)
+    sp_pct_20d = (data['macro']['Close'].iloc[-1] / data['macro']['Close'].iloc[-21] - 1) * 100
 
-    # ===== Top facts =====
     top_facts = (
-        fact_card("🌡️", "อุณหภูมิตลาด (VIX)",
-                  f"{data['current_vix']:.1f}",
-                  f"{vix_emoji} {vix_label}")
-        + fact_card("🎭", "อารมณ์ตลาด",
-                    regime_label,
-                    f"{regime_emoji} {regime_desc}")
-        + fact_card("📊", "ดัชนีหุ้นใหญ่ของอเมริกา (S&P 500)",
+        fact_card("🌡️", t["fact_vix_label"], f"{vix:.2f}", vix_emoji)
+        + fact_card("🎭", t["fact_regime_label"], f"{regime_emoji} {regime_name}", regime_desc)
+        + fact_card("📊", t["fact_sp500_label"],
                     f"{data['macro']['Close'].iloc[-1]:,.0f}",
-                    "เป็นตัวแทนตลาดหุ้นโลก")
+                    f"{sp_pct_20d:+.2f}% (20 day)")
     )
 
-    # ===== VIX explainer =====
-    vix_explainer = """
-    <div class="simple-list">
-        <ul>
-            <li><strong>VIX ต่ำ (0-20)</strong> ☀️ = ตลาดสงบ ทุกคนชิวๆ ลงทุนได้ปกติ</li>
-            <li><strong>VIX กลาง (20-30)</strong> ⛅ = เริ่มมีคนกังวล ต้องระวัง</li>
-            <li><strong>VIX สูง (30-40)</strong> ⛈️ = ทุกคนกลัว ตลาดผันผวนแรง</li>
-            <li><strong>VIX สูงมาก (>40)</strong> 🌪️ = วิกฤต! เคยแตะ 80 ตอน COVID-2020</li>
-        </ul>
-    </div>
-    """
+    # ---- VIX speech ----
+    speech_vix = speech_bubble("💬", t["sec2_chart_caption"])
 
-    if data['current_vix'] < 20:
-        vix_speech_text = (
-            f"VIX ตอนนี้ <strong>{data['current_vix']:.1f}</strong> = "
-            f"{vix_emoji} ตลาดสงบมาก เหมือนวันแดดออกไม่มีเมฆ — "
-            "นักลงทุนไม่ค่อยกลัวอะไร"
-        )
-    elif data['current_vix'] < 30:
-        vix_speech_text = (
-            f"VIX ตอนนี้ <strong>{data['current_vix']:.1f}</strong> = "
-            f"{vix_emoji} เริ่มมีเมฆมาก — นักลงทุนเริ่มกังวล แต่ยังไม่ถึงขั้นวิกฤต"
-        )
+    # ---- Forecast card ----
+    pred = data['predicted_vix']
+    delta = pred - vix
+    if delta > 2:
+        fc_label, fc_msg, fc_color, fc_emoji = (t["forecast_up_label"],
+            t["forecast_up_msg"].format(pred=pred, delta=delta), "#EF553B", "📈")
+    elif delta > -0.5:
+        fc_label, fc_msg, fc_color, fc_emoji = (t["forecast_flat_label"],
+            t["forecast_flat_msg"].format(pred=pred), "#FFA15A", "↔️")
     else:
-        vix_speech_text = (
-            f"VIX ตอนนี้ <strong>{data['current_vix']:.1f}</strong> = "
-            f"{vix_emoji} <strong>ระวัง!</strong> ตลาดกลัวมาก — มักเกิดในช่วงวิกฤตจริง"
-        )
-    speech_vix = speech_bubble("🧒", vix_speech_text)
+        fc_label, fc_msg, fc_color, fc_emoji = (t["forecast_down_label"],
+            t["forecast_down_msg"].format(pred=pred, delta=delta), "#00cc96", "📉")
+    forecast_card = big_status(fc_emoji, fc_label, fc_msg, fc_color)
+    speech_forecast = speech_bubble("💬", t["forecast_speech"])
 
-    # ===== Forecast =====
-    pred_delta = data['predicted_vix'] - data['current_vix']
-    if pred_delta > 2:
-        forecast_emoji = "📈"
-        forecast_msg = "ระวัง! ตลาดอาจกลัวมากขึ้น"
-        forecast_color = "#EF553B"
-    elif pred_delta > 0:
-        forecast_emoji = "↗️"
-        forecast_msg = "อาจมีความกังวลเพิ่มเล็กน้อย"
-        forecast_color = "#FFA15A"
-    else:
-        forecast_emoji = "📉"
-        forecast_msg = "ดี! สถานการณ์น่าจะคลี่คลาย"
-        forecast_color = "#00cc96"
-
-    forecast_card = big_status(
-        forecast_emoji,
-        f"AI ทำนาย VIX อีก 7 วัน = {data['predicted_vix']:.1f}",
-        f"เปลี่ยนแปลง {pred_delta:+.1f} จากวันนี้ — {forecast_msg}",
-        forecast_color
-    )
-
-    speech_forecast = speech_bubble(
-        "🤖",
-        f"AI ตัวนี้เรียนรู้รูปแบบของ VIX จาก 5 ปีที่ผ่านมา <strong>1,259 วัน</strong> "
-        f"และพยายามทำนายว่าใน 7 วันข้างหน้า VIX จะเป็นเท่าไหร่ "
-        f"ครั้งนี้มันบอกว่า <strong>{data['predicted_vix']:.1f}</strong>"
-    )
-
-    # ===== Accuracy =====
+    # ---- Accuracy ----
     r2 = data['wf_result']['mean_score']
     if r2 > 0.3:
-        accuracy_msg = "AI แม่นพอใช้ — ทำนายได้ดีกว่าเดาเฉยๆ"
+        acc_msg = t["acc_good_msg"]
     elif r2 > 0:
-        accuracy_msg = "AI แม่นนิดหน่อย — ดีกว่าโยนเหรียญ"
+        acc_msg = t["acc_ok_msg"]
     else:
-        accuracy_msg = "AI <strong>ไม่ค่อยแม่น</strong> — VIX เป็นตัวแปรที่ทำนายยากที่สุดในโลกการเงิน แม้แต่ AI ที่ดีที่สุดก็ยังลำบาก"
-
-    accuracy_explainer = f"""
-    <div class="simple-list">
-        <ul>
-            <li>📐 <strong>R² (อาร์-สแควร์)</strong> = คะแนนความแม่นยำ (0 ถึง 1)</li>
-            <li>✅ <strong>R² = 1</strong> = แม่นยำ 100% (ทำนายเป๊ะ)</li>
-            <li>⚖️ <strong>R² = 0</strong> = แค่เดาค่าเฉลี่ย (ไม่ดีกว่ามนุษย์ทั่วไป)</li>
-            <li>❌ <strong>R² ติดลบ</strong> = แย่กว่าเดามั่ว!</li>
-        </ul>
-    </div>
-    <p style="margin: 20px 0; font-size: 1.15rem; text-align: center;">
-        ผล AI ตอนนี้: <strong style="font-size: 1.6rem; color: #{('00cc96' if r2 > 0.3 else 'FFA15A' if r2 > 0 else 'EF553B')};">R² = {r2:.3f}</strong>
-    </p>
-    """
-
+        acc_msg = t["acc_bad_msg"]
+    speech_accuracy = speech_bubble("💬", acc_msg)
     wf_chart = fig_to_html(draw_walkforward_chart(data['wf_result']['predictions_df']))
 
-    speech_accuracy = speech_bubble("🧒", accuracy_msg)
-
-    # ===== Model Comparison =====
+    # ---- Comparison ----
     cmp_fig = draw_model_comparison(data['cmp_reg'])
-    cmp_chart = fig_to_html(cmp_fig) if cmp_fig else "<p>ไม่มีข้อมูลเปรียบเทียบ</p>"
-
-    # ✨ คัด best (R² สูงสุด) vs worst (R² ต่ำสุด)
+    cmp_chart = fig_to_html(cmp_fig) if cmp_fig else "<p>n/a</p>"
     cmp_sorted = data['cmp_reg'].sort_values('Mean Score', ascending=False).reset_index(drop=True)
     best = cmp_sorted.iloc[0]
     worst = cmp_sorted.iloc[-1]
-
     compare_winner_loser = f"""
     <div class="compare-grid">
         <div class="compare-card winner">
             <div class="compare-emoji">🥇</div>
             <div class="compare-name">{best['Model']}</div>
             <div class="compare-num">R² = {best['Mean Score']:.3f}</div>
-            <div class="compare-desc">ผู้ชนะ — แม่นที่สุดในการทดสอบครั้งนี้</div>
+            <div class="compare-desc">{t['winner_desc']}</div>
         </div>
         <div class="compare-card loser">
             <div class="compare-emoji">🥉</div>
             <div class="compare-name">{worst['Model']}</div>
             <div class="compare-num">R² = {worst['Mean Score']:.3f}</div>
-            <div class="compare-desc">แย่สุดในรอบนี้</div>
+            <div class="compare-desc">{t['loser_desc']}</div>
         </div>
     </div>
     """
-
-    # ===== Honest insight ขึ้นกับว่า Naive ชนะหรือไม่ =====
     naive_row = data['cmp_reg'][data['cmp_reg']['Model'] == 'Naive']
-    if not naive_row.empty:
-        naive_score = float(naive_row.iloc[0]['Mean Score'])
-        naive_beats_all = best['Model'] == 'Naive'
+    if not naive_row.empty and best['Model'] == 'Naive':
+        speech_compare = speech_bubble("💬",
+            t["cmp_naive_wins"].format(naive_score=float(naive_row.iloc[0]['Mean Score'])))
     else:
-        naive_score = None
-        naive_beats_all = False
+        speech_compare = speech_bubble("💬",
+            t["cmp_ml_wins"].format(best_model=best['Model'], best_score=best['Mean Score']))
 
-    if naive_beats_all:
-        speech_compare = speech_bubble(
-            "🤯",
-            f"<strong>เซอร์ไพรส์! Naive baseline ชนะทุก AI</strong><br><br>"
-            f"'Naive' คือการเดาง่ายๆ ว่า <em>'VIX อีก 7 วัน = VIX วันนี้'</em> "
-            f"(R² = {naive_score:.3f}) — ไม่ใช้ AI เลย<br><br>"
-            f"แต่กลับชนะ AI ฉลาดทุกตัว (XGBoost, LightGBM, LSTM)<br><br>"
-            f"<strong>🎓 บทเรียนสำคัญ</strong>: นี่คือสิ่งที่นักการเงินเรียกว่า "
-            f"<strong>'Random Walk Hypothesis'</strong> — ตลาดผันผวนแบบสุ่มมาก "
-            f"จน AI ที่ดีที่สุดก็ทำนายไม่ได้ดีกว่า 'พรุ่งนี้ = วันนี้'"
-        )
-    else:
-        speech_compare = speech_bubble(
-            "🤓",
-            f"<strong>{best['Model']}</strong> ชนะใน task นี้ (R² = {best['Mean Score']:.3f}) "
-            f"<br><br>เราใส่ <strong>Naive baseline</strong> (เดาว่า 'VIX อีก 7 วัน = VIX วันนี้') "
-            f"เป็นมาตรฐาน — ถ้าโมเดล ML ไม่ชนะ baseline นี้ = ใช้ไม่ได้<br><br>"
-            f"บทเรียน: <strong>เริ่มจาก baseline ง่ายๆ เสมอ</strong> ก่อนใช้ AI ใหญ่ๆ"
-        )
-
-    # ===== SHAP =====
+    # ---- SHAP ----
     shap_values, feat_names, X_sample = data['shap']
-    shap_explainer = """
-    <div class="simple-list">
-        <ul>
-            <li>🍜 เหมือนเชฟทำต้มยำ — บางวัตถุดิบสำคัญมาก (พริก ข่า) บางอันสำคัญน้อย (เกลือ)</li>
-            <li>🤖 SHAP บอกว่า AI ให้น้ำหนักกับ "วัตถุดิบ" ไหนเยอะที่สุด</li>
-            <li>📊 แท่งยิ่งยาว = feature นั้นสำคัญมาก ต่อการตัดสินใจของ AI</li>
-        </ul>
-    </div>
-    """
     if shap_values is not None:
         shap_chart = fig_to_html(draw_shap_summary(shap_values, feat_names, X_sample))
-        # หาว่า feature ไหนสำคัญสุด
         importance = np.abs(shap_values).mean(axis=0)
-        top_idx = int(np.argmax(importance))
-        top_feature = feat_names[top_idx] if feat_names else "unknown"
-        speech_shap = speech_bubble(
-            "🧒",
-            f"AI ของเราดู <strong>{top_feature}</strong> มากที่สุด — "
-            "นี่คือ 'วัตถุดิบหลัก' ที่ AI ใช้ตัดสินใจ"
-        )
+        top_feat = feat_names[int(np.argmax(importance))] if feat_names else "?"
+        speech_shap = speech_bubble("💬", t["shap_top_msg"].format(top_feat=top_feat))
     else:
-        shap_chart = "<p>ไม่มี SHAP data</p>"
+        shap_chart = "<p>n/a</p>"
         speech_shap = ""
 
-    # ===== Backtest =====
-    strat = data['bt_metrics']["Black_Swan_Strategy"]
-    base = data['bt_metrics']["Baseline_Buy_Hold"]
-    ts = data['bt_metrics']["Trading_Stats"]
-    sharpe_diff = strat['Sharpe Ratio'] - base['Sharpe Ratio']
-
-    # คำนวณ final return จาก equity curve
-    bt_clean = data['bt'].dropna(subset=['Market_Return', 'Strategy_Return'])
-    strat_return_pct = ((1 + bt_clean['Strategy_Return']).prod() - 1) * 100
-    base_return_pct = ((1 + bt_clean['Market_Return']).prod() - 1) * 100
-
-    initial = 1_000_000
-    strat_final = initial * (1 + strat_return_pct / 100)
-    base_final = initial * (1 + base_return_pct / 100)
-
-    backtest_cards = f"""
-    <div class="compare-grid">
-        <div class="compare-card {'winner' if strat_return_pct > base_return_pct else 'loser'}">
-            <div class="compare-emoji">🛡️</div>
-            <div class="compare-name">ใช้กลยุทธ์ของเรา</div>
-            <div class="compare-num">{strat_final:,.0f} บาท</div>
-            <div class="compare-desc">
-                เริ่มต้น 1 ล้าน → {strat_return_pct:+.1f}%<br>
-                ขาดทุนสูงสุด: <strong>{strat['Max Drawdown (%)']:.1f}%</strong>
-            </div>
-        </div>
-        <div class="compare-card {'winner' if base_return_pct > strat_return_pct else 'loser'}">
-            <div class="compare-emoji">📊</div>
-            <div class="compare-name">ซื้อแล้วถือเฉยๆ</div>
-            <div class="compare-num">{base_final:,.0f} บาท</div>
-            <div class="compare-desc">
-                เริ่มต้น 1 ล้าน → {base_return_pct:+.1f}%<br>
-                ขาดทุนสูงสุด: <strong>{base['Max Drawdown (%)']:.1f}%</strong>
-            </div>
-        </div>
-    </div>
-    <p class="section-tagline" style="text-align: center;">
-        💰 รวมค่าธรรมเนียมการซื้อขายแล้ว ({ts['Number of Trades']} ครั้ง) —
-        ใกล้เคียงความจริง
-    </p>
-    """
-
-    equity_chart = fig_to_html(draw_equity_curve_chart(data['bt']))
-    dd_chart = fig_to_html(draw_drawdown_chart(data['bt']))
-    signal_chart = fig_to_html(draw_backtest_chart(data['bt']))
-
-    if strat_return_pct > base_return_pct:
-        bt_msg = (
-            f"🎉 กลยุทธ์ของเรา <strong>ชนะ</strong> การซื้อแล้วถือเฉยๆ! "
-            f"ได้เงินมากกว่า <strong>{strat_final - base_final:,.0f} บาท</strong> "
-            f"และ <strong>ขาดทุนน้อยกว่า</strong>ในช่วงตลาดตก"
-        )
-    else:
-        bt_msg = (
-            f"❌ กลยุทธ์ของเรา <strong>แพ้</strong> การซื้อแล้วถือเฉยๆ ในช่วงนี้ "
-            f"เพราะ <strong>{YEARS_LOOKBACK} ปีที่ผ่านมาตลาดส่วนใหญ่ขาขึ้น</strong> "
-            f"ระบบป้องกันเลย sacrifice กำไรในช่วงดีไป — เหมือนคนใส่หมวกกันน็อคเดินบนทางที่ปลอดภัย "
-            f"<br><br>กลยุทธ์นี้จะแสดงคุณค่าจริง <strong>ตอนวิกฤต</strong> เช่น COVID-2020 หรือ 2008"
-        )
-    speech_backtest = speech_bubble("🧒", bt_msg)
-
-    # ===== Animated + 3D =====
-    animated_chart = fig_to_html(draw_animated_vix_timeline(data['macro'], step_months=3))
-    volatility_3d_chart = fig_to_html(draw_3d_volatility(data['macro']))
-
-    speech_animated = speech_bubble(
-        "🎬",
-        "กราฟแบบนี้เห็นได้ว่า VIX <strong>พุ่งทุกครั้งที่มีวิกฤต</strong> — "
-        "ก.พ. 2020 (COVID), ก.พ. 2022 (สงครามรัสเซีย-ยูเครน), ก.ย. 2022 (เงินเฟ้อ) "
-        "<br><br>ลองกดเล่นดูเส้นจะค่อยๆ ขึ้นทีละเดือน เหมือนดู timelapse"
-    )
-    speech_3d = speech_bubble(
-        "🌐",
-        "<strong>ลองหมุนดู!</strong> Mouse drag = หมุน, Scroll = zoom<br><br>"
-        "จุดสีแดง = VIX สูง (ตลาดกลัว) | สีเขียว = VIX ต่ำ (ตลาดสงบ)<br>"
-        "สังเกตว่า <strong>จุดแดงมักอยู่ในวันที่ S&P -3% หรือมากกว่า</strong> — "
-        "พอตลาดตกแรง ความกลัวก็พุ่ง"
-    )
-
-    # ===== COVID Case Study =====
+    # ---- COVID section ----
     covid = data.get('covid')
     if covid:
-        lead_text = (f"<strong>{covid['signal_lead_days']} วันก่อน</strong>"
-                     if covid['signal_lead_days'] and covid['signal_lead_days'] > 0
-                     else "ในช่วงเดียวกับ")
+        if covid['signal_lead_days'] and covid['signal_lead_days'] > 0:
+            lead_text = t["covid_lead_before"].format(days=covid['signal_lead_days'])
+        else:
+            lead_text = t["covid_lead_same"]
         first_sig_text = (covid['first_signal_date'].strftime('%d %b %Y')
-                          if covid['first_signal_date'] else "ไม่ได้เตือน")
+                          if covid['first_signal_date'] else "n/a")
         peak_text = covid['peak_vix_date'].strftime('%d %b %Y')
+        lead_with_suffix = f"{lead_text} {t['covid_lead_suffix']}"
 
         covid_section = f"""
 <section>
-  <h2>🦠 Case Study: COVID-19 Crash 2020</h2>
-  <p class="section-tagline">
-    ลองดูตัวอย่างจริง — ระบบของเราเตือนทันเหตุการณ์วิกฤตที่ใหญ่ที่สุดในรอบ 10 ปีมั้ย?
-  </p>
-
+  <h2>{t['covid_h2']}</h2>
+  <p class="section-tagline">{t['covid_tag']}</p>
   <div class="facts-grid">
-    {fact_card("🚨", "ระบบเตือนครั้งแรก", first_sig_text,
-               f"{lead_text}จุดสูงสุดของ VIX")}
-    {fact_card("⛈️", "VIX แตะจุดสูงสุด", f"{covid['peak_vix']:.0f}",
-               f"เมื่อวันที่ {peak_text}")}
-    {fact_card("📉", "S&P 500 ตก", f"{covid['drawdown_pct']:.1f}%",
-               "จาก peak ถึง trough ในช่วงนี้")}
-    {fact_card("🔔", "จำนวนสัญญาณเตือน", f"{covid['n_signals']} ครั้ง",
-               "ตลอดช่วง ก.พ. - มิ.ย. 2020")}
+    {fact_card("🚨", t['covid_first_signal'], first_sig_text, lead_with_suffix)}
+    {fact_card("⛈️", t['covid_peak'], f"{covid['peak_vix']:.0f}", t['covid_peak_desc'].format(date=peak_text))}
+    {fact_card("📉", t['covid_drawdown'], f"{covid['drawdown_pct']:.1f}%", t['covid_drawdown_desc'])}
+    {fact_card("🔔", t['covid_signals'], f"{covid['n_signals']}", t['covid_signals_desc'])}
   </div>
-
   <div class="chart-wrap">{fig_to_html(covid['fig'])}</div>
-
-  {speech_bubble("🎓",
-    f"<strong>นี่คือสิ่งที่ระบบควรทำได้</strong> — เตือนล่วงหน้าก่อนวิกฤตจริง "
-    f"ในกรณี COVID ระบบส่งสัญญาณวันที่ <strong>{first_sig_text}</strong> "
-    f"ซึ่ง {lead_text}จุดที่ตลาดผันผวนสูงสุด<br><br>"
-    "ถ้านักลงทุนเชื่อสัญญาณ → ออกจากตลาดเป็นเงินสด → หลีกเลี่ยงการขาดทุน "
-    f"<strong>{abs(covid['drawdown_pct']):.0f}%</strong> ในเวลา 1 เดือน<br><br>"
-    "<em>แม้ AI ทำนาย VIX ไม่แม่น (Issue ที่เราพบ) — แต่ระบบ rule-based "
-    "(VIX > 30 + vol spike) ทำงานได้จริงในวิกฤต</em>"
-  )}
+  {speech_bubble("💬", t['covid_msg'].format(first_sig=first_sig_text, lead=lead_text, drawdown=f"{abs(covid['drawdown_pct']):.0f}"))}
 </section>
 """
     else:
         covid_section = ""
 
-    # ===== Multi-asset =====
+    # ---- Animated + 3D ----
+    animated_chart = fig_to_html(draw_animated_vix_timeline(data['macro'], step_months=3))
+    volatility_3d_chart = fig_to_html(draw_3d_volatility(data['macro']))
+    speech_animated = speech_bubble("💬", t["anim_speech"])
+    speech_threed = speech_bubble("💬", t["threed_speech"])
+
+    # ---- Backtest ----
+    strat = data['bt_metrics']["Black_Swan_Strategy"]
+    base = data['bt_metrics']["Baseline_Buy_Hold"]
+    ts = data['bt_metrics']["Trading_Stats"]
+    bt_clean = data['bt'].dropna(subset=['Market_Return', 'Strategy_Return'])
+    strat_pct = ((1 + bt_clean['Strategy_Return']).prod() - 1) * 100
+    base_pct = ((1 + bt_clean['Market_Return']).prod() - 1) * 100
+    strat_final = 1_000_000 * (1 + strat_pct / 100)
+    base_final = 1_000_000 * (1 + base_pct / 100)
+
+    backtest_cards = f"""
+    <div class="compare-grid">
+        <div class="compare-card {'winner' if strat_pct > base_pct else 'loser'}">
+            <div class="compare-emoji">🛡️</div>
+            <div class="compare-name">{t['bt_strategy_label']}</div>
+            <div class="compare-num">{strat_final:,.0f}</div>
+            <div class="compare-desc">{t['bt_initial']} → {strat_pct:+.1f}%<br>{t['bt_mdd']}: <strong>{strat['Max Drawdown (%)']:.1f}%</strong></div>
+        </div>
+        <div class="compare-card {'winner' if base_pct > strat_pct else 'loser'}">
+            <div class="compare-emoji">📊</div>
+            <div class="compare-name">{t['bt_baseline_label']}</div>
+            <div class="compare-num">{base_final:,.0f}</div>
+            <div class="compare-desc">{t['bt_initial']} → {base_pct:+.1f}%<br>{t['bt_mdd']}: <strong>{base['Max Drawdown (%)']:.1f}%</strong></div>
+        </div>
+    </div>
+    <p class="section-tagline" style="text-align: center;">{t['bt_strategy_fees'].format(n=ts['Number of Trades'], tx=TRANSACTION_COST_BPS)}</p>
+    """
+    equity_chart = fig_to_html(draw_equity_curve_chart(data['bt']))
+    dd_chart = fig_to_html(draw_drawdown_chart(data['bt']))
+    signal_chart = fig_to_html(draw_backtest_chart(data['bt']))
+    if strat_pct > base_pct:
+        speech_backtest = speech_bubble("💬",
+            t["bt_win_msg"].format(diff=strat_final - base_final))
+    else:
+        speech_backtest = speech_bubble("💬",
+            t["bt_lose_msg"].format(years=YEARS_LOOKBACK))
+
+    # ---- Multi-asset ----
     if data['assets']:
         fig = go.Figure()
         for name, df in data['assets'].items():
-            fig.add_trace(go.Scatter(
-                x=df.index, y=df['VIX'], mode='lines',
-                name=name, line=dict(width=1.5)
-            ))
+            fig.add_trace(go.Scatter(x=df.index, y=df['VIX'], mode='lines',
+                                     name=name, line=dict(width=1.5)))
         fig.update_layout(
-            title="ความวุ่นวายในตลาดทั่วโลก",
-            xaxis_title="เวลา", yaxis_title="ระดับความวุ่นวาย",
+            title=t["multi_chart_title"],
+            xaxis_title=t["multi_x"], yaxis_title=t["multi_y"],
             template="plotly_dark", height=420, hovermode="x unified",
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
         )
         multi_asset_chart = fig_to_html(fig)
     else:
-        multi_asset_chart = "<p>โหลดข้อมูลไม่ได้</p>"
+        multi_asset_chart = "<p>n/a</p>"
+    speech_multi_asset = speech_bubble("💬", t["multi_speech"])
 
-    speech_multi_asset = speech_bubble(
-        "🌍",
-        "Bitcoin มักผันผวนสูงกว่าหุ้นปกติ 3-5 เท่า ในขณะที่ <strong>ทอง</strong> เป็น 'ที่หลบภัย' "
-        "เวลามีวิกฤต — คนแห่ซื้อทำให้ราคาขึ้น "
-        "<br><br>ถ้าเห็น<strong>ทุกตลาดวุ่นวายพร้อมกัน</strong> = อันตรายระดับโลก (เช่น COVID-2020)"
-    )
-
-    # ===== Final summary =====
-    final_status = f"{overall_emoji} <strong>{overall_title}</strong> — {overall_subtitle}"
-
-    if pred_delta > 2:
-        final_forecast = f"⚠️ AI ทำนายว่าตลาดจะ <strong>กลัวมากขึ้น</strong> (VIX เพิ่ม {pred_delta:.1f})"
-    elif pred_delta > 0:
-        final_forecast = f"↗️ ตลาดอาจ <strong>กังวลขึ้นเล็กน้อย</strong> (VIX เพิ่ม {pred_delta:.1f})"
+    # ---- Final summary ----
+    final_status_text = f"{vix_emoji} <strong>{regime_name}</strong> · VIX = {vix:.2f}"
+    if delta > 2:
+        final_forecast_text = f"⚠️ VIX expected to rise to {pred:.1f} (+{delta:.1f})" if lang == "en" \
+                              else f"⚠️ VIX คาดว่าจะขึ้นเป็น {pred:.1f} (+{delta:.1f})"
+    elif delta > -0.5:
+        final_forecast_text = f"↔️ VIX expected to stay near {pred:.1f}" if lang == "en" \
+                              else f"↔️ VIX คาดว่าจะทรงตัวที่ {pred:.1f}"
     else:
-        final_forecast = f"✅ ตลาดน่าจะ <strong>คลี่คลาย</strong> (VIX ลด {abs(pred_delta):.1f})"
+        final_forecast_text = f"✅ VIX expected to drop to {pred:.1f} ({delta:.1f})" if lang == "en" \
+                              else f"✅ VIX คาดว่าจะลดเป็น {pred:.1f} ({delta:.1f})"
 
-    # ===== Render =====
+    # ---- Render ----
     html = HTML_TEMPLATE.format(
         timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        years=YEARS_LOOKBACK,
-        hero_status=hero_status,
-        top_facts=top_facts,
-        vix_explainer=vix_explainer,
+        data_window_resolved=t["data_window"].format(years=YEARS_LOOKBACK),
+        anim_tag_resolved=t["anim_tag"].format(years=YEARS_LOOKBACK),
+        bt_tag_resolved=t["bt_tag"].format(years=YEARS_LOOKBACK, tx=TRANSACTION_COST_BPS),
+        current_lang_name=("English" if lang == "en" else "ไทย"),
+        hero_status=hero_status, top_facts=top_facts,
         speech_vix=speech_vix,
         vix_chart=fig_to_html(draw_vix_history_chart(data['macro'], predicted_vix=data['predicted_vix'])),
-        forecast_card=forecast_card,
-        speech_forecast=speech_forecast,
-        accuracy_explainer=accuracy_explainer,
-        wf_chart=wf_chart,
-        speech_accuracy=speech_accuracy,
-        cmp_chart=cmp_chart,
-        compare_winner_loser=compare_winner_loser,
-        speech_compare=speech_compare,
-        shap_explainer=shap_explainer,
-        shap_chart=shap_chart,
-        speech_shap=speech_shap,
-        backtest_cards=backtest_cards,
-        equity_chart=equity_chart,
-        dd_chart=dd_chart,
-        signal_chart=signal_chart,
-        speech_backtest=speech_backtest,
-        animated_chart=animated_chart,
-        volatility_3d_chart=volatility_3d_chart,
-        speech_animated=speech_animated,
-        speech_3d=speech_3d,
+        forecast_card=forecast_card, speech_forecast=speech_forecast,
+        wf_chart=wf_chart, speech_accuracy=speech_accuracy,
+        cmp_chart=cmp_chart, compare_winner_loser=compare_winner_loser,
+        speech_compare=speech_compare, shap_chart=shap_chart, speech_shap=speech_shap,
         covid_section=covid_section,
-        multi_asset_chart=multi_asset_chart,
-        speech_multi_asset=speech_multi_asset,
-        final_status=final_status,
-        final_forecast=final_forecast,
-        # Tech section
-        tech_vix=f"{data['current_vix']:.2f}",
-        tech_pred=f"{data['predicted_vix']:.2f}",
-        tech_r2=f"{data['wf_result']['mean_score']:.3f}",
+        animated_chart=animated_chart, volatility_3d_chart=volatility_3d_chart,
+        speech_animated=speech_animated, speech_threed=speech_threed,
+        backtest_cards=backtest_cards, equity_chart=equity_chart,
+        dd_chart=dd_chart, signal_chart=signal_chart, speech_backtest=speech_backtest,
+        multi_asset_chart=multi_asset_chart, speech_multi_asset=speech_multi_asset,
+        final_status=final_status_text, final_forecast_text=final_forecast_text,
+        tech_vix=f"{vix:.2f}",
+        tech_pred=f"{pred:.2f}",
+        tech_r2=f"{r2:.3f}",
         tech_r2_std=f"{data['wf_result']['std_score']:.3f}",
         tech_best_model=best['Model'],
         tech_strat_sharpe=f"{strat['Sharpe Ratio']:.2f}",
@@ -1154,12 +1165,25 @@ def build():
         tech_strat_mdd=f"{strat['Max Drawdown (%)']:.2f}",
         tech_base_mdd=f"{base['Max Drawdown (%)']:.2f}",
         wf_splits=WF_SPLITS, tx_cost=TRANSACTION_COST_BPS,
+        **t,  # all other string keys from dict
     )
 
-    OUTPUT_FILE.write_text(html, encoding='utf-8')
-    print(f"\n✅ Report saved: {OUTPUT_FILE}")
-    print(f"📦 Size: {OUTPUT_FILE.stat().st_size / 1024:.1f} KB")
+    output_file.write_text(html, encoding='utf-8')
+    print(f"{t['log_saved']} {output_file}")
+    return output_file
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Build static HTML report(s)")
+    parser.add_argument("--lang", choices=["th", "en", "both"], default="both")
+    args = parser.parse_args()
+
+    langs = ["th", "en"] if args.lang == "both" else [args.lang]
+    for lang in langs:
+        print(f"\n{'=' * 50}\nBuilding {lang.upper()} version\n{'=' * 50}")
+        build(lang)
+    print("\n✅ Done!")
 
 
 if __name__ == "__main__":
-    build()
+    main()
