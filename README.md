@@ -1,4 +1,4 @@
-# 🚨 Black Swan Risk Indicator (Quant Edition)
+# 🚨 Black Swan Risk Indicator
 
 > 🌐 **Languages:** **English** | [ภาษาไทย](README.th.md)
 
@@ -9,64 +9,254 @@
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.31%2B-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> 👉 **Click the green badge above** to see the live report instantly (no install required)
+---
 
-AI-powered & Quant-driven early warning system for financial crises.
+## What is this?
+
+**Black Swan Risk Indicator** is an early-warning system for financial market crises.
+It combines **NLP sentiment analysis** of global financial news with **time-series ML
+forecasting** and **rule-based regime detection** to produce a single **Crisis Risk
+Score (0–100)** — backed by a 5-year historical backtest.
+
+The system surfaces when markets are likely to enter a "fear regime" so investors
+can prepare for downside scenarios like the 2008 crisis, COVID-2020 crash, or
+inflation shock of 2022.
+
+🌐 **[View Live Report →](https://oomNoNe.github.io/black-swan-indicator/)** · Built with Python · MIT License
 
 ---
 
-## 📊 About the Live Report
+## 🔥 The Problem
 
-The **live report** at `oomNoNe.github.io/black-swan-indicator/` is a
-**pre-built static HTML snapshot** (not a live web app).
+Most retail investors are **caught off guard** by market crashes because the tools
+they use are backward-looking:
 
-**Why static?**
-- ⚡ Instant load (< 1 second) — no waiting for ML training
-- 💸 Free hosting (GitHub Pages, no server costs)
-- 📱 Works on any device, mobile-friendly
+- 📊 **Stock screeners** show fundamentals — useless when markets are panicking
+- 📈 **Technical indicators** lag — they confirm crashes *after* they start
+- 📰 **News feeds** are reactive — by the time a crash makes headlines, it's too late
+- 🤖 **AI tools** focus on returns prediction — but volatility (fear) is what kills portfolios
 
-**How often does it update?**
-| Trigger | Schedule |
+Meanwhile, **professional quants** use ensembles of macro indicators + sentiment
+analysis + regime models that aren't accessible to most people.
+
+**This project asks**: *Can we build a transparent, open-source crisis detector
+that an individual investor can run on their laptop?*
+
+---
+
+## 💡 The Solution
+
+A multi-layer detection pipeline that fuses **3 independent signals**:
+
+1. 📰 **News sentiment** (FinBERT analyzes global financial headlines)
+2. 📊 **Market volatility** (VIX + 20-day realized vol + threshold rules)
+3. 🤖 **ML forecasting** (XGBoost on 13 macro features predicts 7-day VIX)
+
+These feed into a dynamically-weighted **Crisis Equation** that adapts to the
+current market regime (Bull / Panic / Ranging).
+
+When the score crosses **70**, the system can fire a **Discord webhook alert**
+so you can act before headlines catch up.
+
+---
+
+## 🗺️ How It Works
+
+```
+Daily / On-demand:
+
+┌─────────────────────────────────────────────────────────┐
+│  1. Fetch data                                           │
+│     yfinance: S&P 500, VIX, 10Y/3M Treasury, Gold, Oil, │
+│     DXY (~1,200 trading days, 8 series)                 │
+│     Google News RSS: 10 latest financial headlines      │
+└────────────────────────┬────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────────┐
+│  2. Feature engineering                                  │
+│     13 features: VIX lags (1/3/7d), momentum, S&P       │
+│     returns (1d/5d), realized vol, yield curve spread,  │
+│     inversion flag, gold/oil/DXY momentum                │
+└────────────────────────┬────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────────┐
+│  3. Three parallel pipelines                            │
+│     ┌─────────────┐ ┌──────────────┐ ┌────────────────┐│
+│     │ FinBERT     │ │ XGBoost      │ │ Regime         ││
+│     │ sentiment   │ │ 7-day VIX    │ │ classifier     ││
+│     │ (NEG/NEU/   │ │ forecast +   │ │ (SMA-50/200    ││
+│     │  POS)       │ │ walk-forward │ │  + rolling vol)││
+│     └─────────────┘ └──────────────┘ └────────────────┘│
+└────────────────────────┬────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────────┐
+│  4. Crisis Equation (regime-weighted fusion)             │
+│     Score = w_news(regime) × NewsRisk                   │
+│           + w_market(regime) × MarketRisk                │
+└────────────────────────┬────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────────┐
+│  5. Outputs                                              │
+│     • Crisis Risk Score (0–100) on gauge                │
+│     • Backtest equity curve + drawdown vs Buy & Hold    │
+│     • Multi-asset volatility comparison                  │
+│     • Discord alert if Score > threshold (configurable) │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🏗️ Architecture
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Presentation Layer                                       │
+│  ├── Streamlit app (5 tabs, interactive sliders)         │
+│  └── Static HTML report (auto-rebuilt weekly via cron)   │
+└──────────────────────────────────────────────────────────┘
+                            ↓
+┌──────────────────────────────────────────────────────────┐
+│  Engine Layer (engine/)                                   │
+│  ├── features.py        — 13-feature builder              │
+│  ├── ml_predictor.py    — 5 models (XGB, LGBM, Ridge,    │
+│  │                         LSTM, Naive baseline)          │
+│  ├── ai_model.py        — FinBERT sentiment wrapper       │
+│  ├── regime_detector.py — Market mood classifier          │
+│  ├── backtester.py      — Sharpe / MDD / transaction cost│
+│  ├── alerts.py          — Discord webhook                 │
+│  ├── experiment_tracker.py — MLflow integration           │
+│  └── disk_cache.py      — joblib + parquet persistence    │
+└──────────────────────────────────────────────────────────┘
+                            ↓
+┌──────────────────────────────────────────────────────────┐
+│  Data Layer (data/)                                       │
+│  ├── market_crawler.py  — yfinance (10 assets supported) │
+│  └── news_crawler.py    — Google News RSS                 │
+└──────────────────────────────────────────────────────────┘
+                            ↓
+┌──────────────────────────────────────────────────────────┐
+│  Infrastructure                                            │
+│  ├── GitHub Actions      — CI/CD + weekly cron rebuild    │
+│  ├── GitHub Pages        — Free static hosting            │
+│  ├── Docker              — Containerized deployment       │
+│  └── Streamlit Cloud     — Optional managed hosting       │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🎯 Key Findings (Honest Results)
+
+This project documents **intellectual honesty over hype**.
+
+### 🏆 Finding 1: Naive baseline beats every ML model
+After tuning 4 ML models (XGBoost, LightGBM, Ridge, LSTM) with walk-forward
+validation, the **persistence baseline** (`VIX in 7 days = VIX today`) won:
+
+| Model | Mean R² (walk-forward CV, 5 folds) |
 |---|---|
-| 🕐 Automatic cron | Every Monday 06:00 UTC (13:00 ICT) |
-| 📝 On code push | When `engine/`, `data/`, `scripts/`, or `ui/components.py` changes |
-| 🖱️ Manual | Trigger via GitHub Actions → "Rebuild Live Report" |
+| 🥇 **Naive (baseline)** | **+0.093** |
+| 🥈 XGBoost (tuned, regularized) | −0.122 |
+| 🥉 LightGBM | −0.184 |
+| Ridge | −0.131 |
+| LSTM (PyTorch) | −3.720 |
 
-The **"📅 Generated"** timestamp at the top of the report shows when
-it was last rebuilt. Data inside reflects market state at that moment.
+**Interpretation**: VIX contains strong random-walk behavior. This validates
+**Fama's Efficient Market Hypothesis** on the volatility-of-volatility surface.
 
-**Want real-time interactive data?** Run the Streamlit app locally (see below).
-Combines **NLP sentiment analysis**, **macro volatility forecasting**, and **regime detection**
-to produce a single Crisis Risk Score (0–100) and a backtested trading strategy.
+🎓 **Engineering lesson**: Always test naive baselines first. If your fancy
+ML doesn't beat persistence, **don't ship the ML**.
+
+### 🦠 Finding 2: Rule-based system worked during COVID-2020
+Despite poor ML forecasting, the rule-based detector (`VIX > 30 AND
+vol_spike > 1.5×`) flagged the COVID crash on **March 9, 2020** — **7 days
+before** VIX peaked at 82.69 on March 16.
+
+An investor who acted on the signal could have avoided a ~30% drawdown.
+
+### 💰 Finding 3: Transaction costs matter
+Without trading costs, the strategy looks great. With realistic 10 bps per
+turnover, Sharpe drops by ~0.05 — small but meaningful. **Many academic
+backtests omit this** and overstate strategy performance.
 
 ---
 
-## ✨ Features
+## 🧠 Engineering Challenges
 
-| Module | Tech | What it does |
-|---|---|---|
-| **Live Risk Dashboard** | Streamlit + Plotly | Real-time VIX, FinBERT sentiment on Google News, weighted Crisis Score gauge |
-| **AI Regime & Prediction** | XGBoost Regressor | 7-day VIX forecast from lagged macro features |
-| **Quant Backtest** | NumPy / Pandas | Sharpe, Max Drawdown, Win Rate, Profit Factor vs. Buy & Hold |
-| **Regime Detector** | SMA + Rolling Vol | Classifies market as Trending Bull / Ranging / Panic and dynamically reweights the risk equation |
+The non-obvious decisions that took the longest to solve:
+
+### 1. Choosing the right validation strategy
+**Problem**: Random `train_test_split` leaked future information into training,
+inflating R² to fake-good levels.
+
+**Solution**: Switched to `TimeSeriesSplit` with **walk-forward expanding
+window**. Train on [0..t], test on [t..t+k], roll forward. Same as production.
+
+**Trade-off**: 5-10× slower than single split, but the only honest way to
+evaluate time-series ML.
+
+### 2. Small dataset for deep learning
+**Problem**: ~1,200 trading days is *tiny* for LSTM. It overfit dramatically
+(R² of −3.72 vs Ridge's −0.13).
+
+**Solution**: Documented this honestly in the report. Kept LSTM in the
+comparison to show breadth, but recommended Ridge/Naive for production.
+**Lesson**: deep learning isn't always the answer.
+
+### 3. Static report vs live Streamlit trade-off
+**Problem**: Streamlit Cloud free tier (1 GB RAM) couldn't host FinBERT
+(~440 MB) + XGBoost + multi-asset fetch. Cold starts took 5+ minutes.
+
+**Solution**: Hybrid architecture:
+- **Static HTML report** (auto-rebuilt weekly) → fast share with anyone
+- **Streamlit app** → run locally for interactive deep-dives
+
+The static report serves 99% of viewers in < 1s. The Streamlit app stays
+for the 1% who want to tweak parameters.
+
+### 4. Persistent disk cache for repeated builds
+**Problem**: Each `build_report.py` run took ~60s (fetch yfinance, train
+XGBoost, walk-forward × 4 models, SHAP). Iterating on UI was painful.
+
+**Solution**: Built `engine/disk_cache.py` — TTL-based parquet + joblib
+caching. 2nd run drops to **~8.7s (7× speedup)**.
+
+### 5. Sentiment scoring drift
+**Problem**: FinBERT was trained in 2019. New jargon ("AI bubble",
+"GameStop saga") falls outside its vocabulary.
+
+**Trade-off accepted**: Documented limitation in the glossary. Alternatives
+(GPT-4 API) are expensive and add latency. For an open-source educational
+project, FinBERT remains the right pick.
 
 ---
 
-## 🧮 The Crisis Equation
+## 🚀 Quick Start
 
+### Option A — Just view the live report
+👉 **[oomNoNe.github.io/black-swan-indicator/](https://oomNoNe.github.io/black-swan-indicator/)** (no install required)
+
+### Option B — Local Python install
+```bash
+git clone https://github.com/oomNoNe/black-swan-indicator.git
+cd black-swan-indicator
+python -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Generate static report (8.7s after first run, ~60s first time)
+python scripts/build_report.py
+start docs/index.html
+
+# OR run interactive Streamlit app
+streamlit run app.py
 ```
-Crisis_Score = w_news(regime) × News_Risk + w_market(regime) × Market_Risk
+
+### Option C — Docker
+```bash
+docker build -t black-swan-indicator .
+docker run -p 8501:8501 black-swan-indicator
 ```
-
-Weights adapt to regime:
-
-| Regime | w_news | w_market |
-|---|---|---|
-| Trending Bull | 0.3 | 0.7 |
-| Panic | 0.7 | 0.3 |
-| Ranging / Unknown | 0.5 | 0.5 |
-
-Backtest signal triggers when **VIX > 30 AND 20-day rolling vol > 1.5× 252-day median vol**.
 
 ---
 
@@ -74,147 +264,141 @@ Backtest signal triggers when **VIX > 30 AND 20-day rolling vol > 1.5× 252-day 
 
 ```
 black-swan-indicator/
-├── app.py                    # Streamlit entry point (3 tabs)
+├── app.py                       # Streamlit entry (5 tabs)
+├── scripts/
+│   └── build_report.py          # Static HTML report generator
 ├── data/
-│   ├── market_crawler.py     # yfinance: S&P 500 + VIX
-│   └── news_crawler.py       # Google News RSS scraper
+│   ├── market_crawler.py        # yfinance + macro features
+│   └── news_crawler.py          # Google News RSS scraper
 ├── engine/
-│   ├── ai_model.py           # FinBERT sentiment wrapper
-│   ├── ml_predictor.py       # XGBoost VIX forecaster
-│   ├── regime_detector.py    # Market regime + dynamic risk equation
-│   └── backtester.py         # Sharpe / MDD / Win Rate / Profit Factor
-└── ui/
-    └── components.py         # Plotly gauge + backtest chart
+│   ├── features.py              # Feature engineering (13 features)
+│   ├── ml_predictor.py          # Model registry + walk-forward CV
+│   ├── lstm_model.py            # PyTorch LSTM with sklearn API
+│   ├── ai_model.py              # FinBERT wrapper
+│   ├── regime_detector.py       # SMA + vol regime classifier
+│   ├── backtester.py            # Quant metrics + transaction cost
+│   ├── alerts.py                # Discord webhook
+│   ├── experiment_tracker.py    # MLflow integration
+│   └── disk_cache.py            # joblib/parquet persistence
+├── ui/
+│   └── components.py            # Plotly chart factory
+├── tests/
+│   └── test_engine.py           # 16 pytest tests
+├── docs/
+│   ├── index.html               # Live report (generated)
+│   ├── .nojekyll                # GitHub Pages config
+│   └── MEDIUM_POST.md           # Blog post draft
+├── .github/
+│   └── workflows/
+│       ├── ci.yml               # Run tests on push/PR
+│       └── rebuild-report.yml   # Weekly cron rebuild
+├── Dockerfile                   # Multi-stage, non-root
+├── requirements.txt
+├── README.md
+└── README.th.md                 # Thai translation
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🎯 Who This Is For
 
-### Option A — Local Python
-```bash
-git clone https://github.com/oomNoNe/black-swan-indicator.git
-cd black-swan-indicator
-python -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-streamlit run app.py
-```
+**Primary user**: Retail investors with technical curiosity who want to
+understand market regimes beyond fundamental ratios.
 
-### Option B — Docker (recommended for deployment)
-```bash
-docker build -t black-swan-indicator .
-docker run -p 8501:8501 black-swan-indicator
-```
-Open http://localhost:8501
-
-The first run downloads the FinBERT model (~440 MB). Subsequent runs are cached.
-
-### Option C — Streamlit Cloud (one-click hosted)
-1. Fork this repo to your GitHub account
-2. Go to https://share.streamlit.io
-3. Click **"New app"** → select your fork → main branch → `app.py`
-4. Deploy and get a public URL
+**Secondary users**:
+- 🎓 ML/Quant students learning walk-forward validation, regime detection
+- 💼 Junior data scientists wanting a finance-domain portfolio piece
+- 📰 Anyone curious how a real "risk dashboard" is built end-to-end
 
 ---
 
-## 🧪 Development
+## 🛠️ Tech Stack
 
-Run tests:
-```bash
-pytest tests/ -v
-```
-
-CI runs automatically on push via GitHub Actions ([workflow](.github/workflows/ci.yml)).
-
----
-
-## 🎓 Why These Models?
-
-### 🤖 FinBERT (for Sentiment Analysis)
-
-**Rationale**: Pre-trained on financial corpora — understands jargon that general
-language models miss (e.g., "bearish guidance", "hawkish Fed", "deleveraging").
-
-| ✅ Pros | ❌ Cons |
+| Layer | Tools |
 |---|---|
-| ~15% more accurate than vanilla BERT on financial text | English only |
-| Open-source, free (ProsusAI) | Trained 2019 — doesn't know new jargon |
-| CPU-friendly inference | ~440MB memory footprint |
-| Pre-trained on Reuters TRC2 | Possible bias from training data |
-
-**Alternatives considered**: GPT-4 (too expensive, latency), generic BERT (no
-domain context), VADER (rule-based, not ML).
-
-### 🌲 XGBoost (for VIX Forecasting)
-
-**Rationale**: Best-in-class for tabular data, which is what our macro lag
-features look like. Battle-tested in Kaggle and used by major hedge funds.
-
-| ✅ Pros | ❌ Cons |
-|---|---|
-| Industry-proven (Kaggle, quant funds) | No temporal memory — manual lag features needed |
-| Extremely fast (< 1s training) | Easy to overfit without tuning |
-| Interpretable via feature importance | Poor extrapolation |
-| Handles missing values natively | Outperformed by deep learning on huge datasets |
-| No feature scaling required | |
-
-**Alternatives considered**: Linear regression (misses non-linearity), LSTM
-(data-hungry, slow, opaque), ARIMA (assumes linearity/stationarity), Transformer
-(overkill for 5 features).
-
-### 📊 SMA + Rolling Vol (for Regime Detection)
-
-**Rationale**: Simple, transparent, and used as a standard by major funds
-(Bridgewater, Two Sigma). No ML required — Occam's Razor applied.
-
-| ✅ Pros | ❌ Cons |
-|---|---|
-| Transparent — not a black box | **Lagging indicator** — SMA-200 reacts slowly |
-| No hyperparameter tuning | Binary thresholds miss transitions |
-| Fast computation | Doesn't use macro/news data |
-| Industry standard | |
-
-**Future alternatives**: Hidden Markov Model (smoother transitions),
-Bayesian regime switching (probabilistic), GMM clustering (unsupervised).
+| **Language** | Python 3.12+ |
+| **Data** | yfinance, pandas, numpy, Google News RSS |
+| **ML** | scikit-learn, XGBoost, LightGBM, PyTorch (LSTM), SHAP |
+| **NLP** | HuggingFace Transformers + FinBERT (ProsusAI) |
+| **Viz** | Plotly (interactive + 3D + animated) |
+| **App** | Streamlit |
+| **Tracking** | MLflow (local file store) |
+| **Alerts** | Discord webhook |
+| **CI/CD** | GitHub Actions (pytest + auto-rebuild cron) |
+| **Hosting** | GitHub Pages (static report), Docker, Streamlit Cloud |
+| **Testing** | pytest (16 tests, all passing) |
+| **Persistence** | joblib + parquet TTL-based disk cache |
 
 ---
 
-## 📊 Methodology Notes
+## 📊 About the Live Report
 
-- **Time-series split** (`shuffle=False`) for XGBoost training — no look-ahead leakage.
-- **Lag features**: VIX lag 1/3/7 days, S&P returns 1d/5d.
-- **Sentiment**: ProsusAI/finbert, truncated to 512 tokens, mapped to 0/50/100.
-- **Caching**: `@st.cache_resource` for models, `@st.cache_data(ttl=1h)` for market data.
+The live report is a **pre-built static HTML snapshot** (not a live web app).
+
+| Property | Value |
+|---|---|
+| 📦 Format | Self-contained HTML with embedded Plotly CDN |
+| 🕐 Auto-update | Every Monday 06:00 UTC + on code push |
+| ⚡ Load time | < 1 second |
+| 💸 Cost | $0 (GitHub Pages) |
+| 📱 Mobile | Fully responsive |
+
+The **"📅 Generated"** timestamp at the top of the report shows last
+rebuild time.
+
+**Want real-time data?** Run `streamlit run app.py` locally.
 
 ---
 
-## 🔭 Roadmap
+## 🔭 Future Roadmap
 
-**Tier 1 — Deploy & Polish**
-- [x] Dockerfile (multi-stage, non-root)
-- [x] GitHub Actions CI (pytest + lint)
-- [x] CI/license/Python badges
-- [ ] Streamlit Cloud live demo URL
+Honest, scoped roadmap (no vaporware):
 
-**Tier 2 — ML/Quant Upgrades** ✅ DONE
-- [x] Walk-forward validation (TimeSeriesSplit) replacing single train/test
-- [x] Macro features: yield curve spread, Gold, Oil, DXY (5 → 13 features)
-- [x] Classification mode: crash vs no-crash + Precision/Recall/F1/ROC-AUC
-- [x] SHAP feature importance (interpretable AI)
-- [x] Transaction cost in backtest (configurable, 0-50 bps)
-- [x] Model comparison: XGBoost vs LightGBM vs Ridge/LogReg (LSTM in Tier 3)
+### Tier 1: Already done ✅
+- [x] Walk-forward validation + 5-model comparison
+- [x] FinBERT sentiment + Crisis Equation
+- [x] Static HTML report + GitHub Pages auto-deploy
+- [x] Persistent disk cache (joblib + parquet)
+- [x] Docker + CI/CD + 16 unit tests
+- [x] COVID-2020 case study built into report
+- [x] Multi-asset support (10 assets)
+- [x] Discord webhook alerts
 
-**Tier 3 — Production** ✅ 4/6 DONE
-- [ ] Batch pipeline (Airflow/Prefect) — *skipped: GitHub Actions cron is lighter for portfolio*
-- [ ] PostgreSQL/DuckDB store — *skipped: in-memory caching sufficient at this scale*
-- [x] Discord webhook alerts (configurable threshold + test button)
-- [x] Multi-asset expansion (10 assets: US equity, EM, crypto, commodities)
-- [x] LSTM model added to comparison (PyTorch)
-- [x] MLflow experiment tracking (local file store)
+### Tier 2: Next iterations
+- [ ] Intraday data (currently daily) via Polygon.io
+- [ ] Sentiment from Reuters/Bloomberg RSS (better signal than Google News)
+- [ ] Hidden Markov Model regime detector (smoother than SMA threshold)
+- [ ] Add credit spread (HY−IG OAS) as feature
+- [ ] Out-of-sample test on 2008 crisis data
+
+### Tier 3: Research directions
+- [ ] Reinforcement learning for position sizing
+- [ ] Transformer-based sentiment (replace FinBERT with FinGPT)
+- [ ] Bayesian uncertainty quantification on predictions
 
 ---
 
 ## ⚠️ Disclaimer
 
-For educational and research purposes only. Not financial advice.
+This is an **educational and research project**. It is **not financial advice**.
+VIX is one of the hardest variables to forecast in finance — even our best
+ML couldn't beat naive persistence. Use the system as a *directional signal*,
+not as a trading recommendation.
+
+Past performance does not guarantee future results. Markets can stay irrational
+longer than you can stay solvent.
+
+---
+
+## 👤 Author
+
+**oomNoNe** — [@oomNoNe](https://github.com/oomNoNe)
+
+📝 [Read the blog post on Medium-style findings](docs/MEDIUM_POST.md)
+🇹🇭 [README ภาษาไทย](README.th.md)
+
+---
+
+## 📄 License
+
+MIT License — free to use, modify, and learn from.
