@@ -361,32 +361,6 @@ Live report เป็น **static HTML snapshot** ที่สร้างไว
 
 ---
 
-## 🔭 Roadmap (Scoped + Honest)
-
-### Tier 1: ทำเสร็จแล้ว ✅
-- [x] Walk-forward validation + 5-model comparison
-- [x] FinBERT sentiment + Crisis Equation
-- [x] Static HTML report + GitHub Pages auto-deploy
-- [x] Persistent disk cache (joblib + parquet)
-- [x] Docker + CI/CD + 16 unit tests
-- [x] COVID-2020 case study
-- [x] Multi-asset (10 assets)
-- [x] Discord webhook alerts
-
-### Tier 2: ทำต่อไป
-- [ ] Intraday data ผ่าน Polygon.io (ปัจจุบัน daily)
-- [ ] Sentiment จาก Reuters/Bloomberg RSS (signal ดีกว่า Google News)
-- [ ] Hidden Markov Model regime (smoother กว่า SMA threshold)
-- [ ] เพิ่ม credit spread (HY-IG OAS) เป็น feature
-- [ ] Out-of-sample test บน data วิกฤต 2008
-
-### Tier 3: Research directions
-- [ ] Reinforcement learning สำหรับ position sizing
-- [ ] Transformer-based sentiment (เปลี่ยน FinBERT → FinGPT)
-- [ ] Bayesian uncertainty quantification
-
----
-
 ## 🤝 AI-Assisted Development
 
 พัฒนาร่วมกับ **Claude (Anthropic)** เป็น coding assistant

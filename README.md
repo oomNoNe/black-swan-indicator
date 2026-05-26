@@ -432,34 +432,6 @@ rebuild time.
 
 ---
 
-## 🔭 Future Roadmap
-
-Honest, scoped roadmap (no vaporware):
-
-### Tier 1: Already done ✅
-- [x] Walk-forward validation + 5-model comparison
-- [x] FinBERT sentiment + Crisis Equation
-- [x] Static HTML report + GitHub Pages auto-deploy
-- [x] Persistent disk cache (joblib + parquet)
-- [x] Docker + CI/CD + 16 unit tests
-- [x] COVID-2020 case study built into report
-- [x] Multi-asset support (10 assets)
-- [x] Discord webhook alerts
-
-### Tier 2: Next iterations
-- [ ] Intraday data (currently daily) via Polygon.io
-- [ ] Sentiment from Reuters/Bloomberg RSS (better signal than Google News)
-- [ ] Hidden Markov Model regime detector (smoother than SMA threshold)
-- [ ] Add credit spread (HY−IG OAS) as feature
-- [ ] Out-of-sample test on 2008 crisis data
-
-### Tier 3: Research directions
-- [ ] Reinforcement learning for position sizing
-- [ ] Transformer-based sentiment (replace FinBERT with FinGPT)
-- [ ] Bayesian uncertainty quantification on predictions
-
----
-
 ## 🤝 AI-Assisted Development
 
 Built collaboratively with **Claude (Anthropic)** as a coding assistant.
