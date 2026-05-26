@@ -184,14 +184,20 @@ backtests omit this** and overstate strategy performance.
 
 ## 🎓 Research Methodology
 
-This project is structured as a **comparative study** answering one research
-question:
+Structured as a **comparative study** answering: *Does news sentiment +
+ML forecasting + rule-based regime detection beat Buy & Hold on a
+risk-adjusted basis?*
 
-> *"Does combining financial-news sentiment with ML forecasting and rule-based
-> regime detection produce risk-adjusted returns superior to a simple Buy & Hold
-> strategy?"*
+| Step | Decision |
+|---|---|
+| **H₀ / H₁** | `Sharpe_strategy ≤ Sharpe_BH` vs `Sharpe_strategy > Sharpe_BH` |
+| **α** | 0.05 · walk-forward k=5 · all ML must beat Naive baseline |
+| **Test stats** | R², Sharpe Δ, Max Drawdown, Win Rate, Profit Factor, COVID lead-time |
+| **Data** | 1,259 trading days · 8 macro series · 10 bps txn cost |
+| **Conclusion** | ❌ ML fails to beat Naive · ✅ Rule-based detector caught COVID 7d early · ⚠️ Defensive strategy underperforms in bull markets |
 
-Following the 5-step statistical inference framework:
+<details>
+<summary>📖 Full 5-step methodology (click to expand)</summary>
 
 ### 1. Hypothesis
 - **H₀ (Null)**: The Black Swan strategy performs no better than Buy & Hold
@@ -229,14 +235,27 @@ Following the 5-step statistical inference framework:
   value of crash-avoidance only shows during actual crises (insufficient
   sample size for formal test).
 
-**Future statistical work**: Add Diebold-Mariano test for forecast accuracy,
+**Future statistical work**: Diebold-Mariano test for forecast accuracy,
 bootstrap CI for Sharpe difference, paired t-test on daily returns.
+
+</details>
 
 ---
 
 ## 🧠 Engineering Challenges
 
-The non-obvious decisions that took the longest to solve:
+5 non-obvious trade-offs from building this:
+
+| # | Challenge | One-line takeaway |
+|---|---|---|
+| 1 | Walk-forward vs naive split | Chose 5-10× slower CV for honest results |
+| 2 | LSTM on small data | Documented R² = -3.72; kept for breadth |
+| 3 | Static vs live Streamlit | Hybrid: HTML for share, Streamlit for dev |
+| 4 | Slow repeat builds | Disk cache 7× speedup (60s → 8.7s) |
+| 5 | FinBERT vocab drift | Accepted limit vs paid GPT-4 API |
+
+<details>
+<summary>📖 Read each in detail (full reasoning + alternatives considered)</summary>
 
 ### 1. Choosing the right validation strategy
 **Problem**: Random `train_test_split` leaked future information into training,
@@ -282,6 +301,8 @@ caching. 2nd run drops to **~8.7s (7× speedup)**.
 (GPT-4 API) are expensive and add latency. For an open-source educational
 project, FinBERT remains the right pick.
 
+</details>
+
 ---
 
 ## 🚀 Quick Start
@@ -314,6 +335,12 @@ docker run -p 8501:8501 black-swan-indicator
 ---
 
 ## 🗂️ Project Structure
+
+4 layers: `data/` → `engine/` → `ui/` + `scripts/` for batch jobs.
+See [Architecture](#-architecture) above for the dependency diagram.
+
+<details>
+<summary>📂 Full file tree (click to expand)</summary>
 
 ```
 black-swan-indicator/
@@ -350,6 +377,8 @@ black-swan-indicator/
 ├── README.md
 └── README.th.md                 # Thai translation
 ```
+
+</details>
 
 ---
 
@@ -431,11 +460,17 @@ Honest, scoped roadmap (no vaporware):
 
 ---
 
-## 🤝 AI-Assisted Development (Transparency Statement)
+## 🤝 AI-Assisted Development
 
-This project was built collaboratively with **Claude (Anthropic)** as a coding
-assistant throughout — from initial scaffold to architecture decisions,
-debugging, and documentation.
+Built collaboratively with **Claude (Anthropic)** as a coding assistant.
+AI helped with code generation, debugging, and documentation drafts.
+I owned problem definition, methodology, critical evaluation,
+verification, and all design decisions.
+
+Every line of code was reviewed, tested, and committed by me.
+
+<details>
+<summary>📖 Detailed breakdown (what AI did vs what I owned)</summary>
 
 ### What AI helped with
 - 💻 Boilerplate code generation (Streamlit, Plotly chart factories, ML pipeline)
@@ -455,14 +490,13 @@ debugging, and documentation.
 ### Why disclose this?
 AI-assisted development is standard in 2025+ software engineering — GitHub Copilot,
 Cursor, Claude Code, and similar tools are widely adopted across the industry.
-I believe transparent disclosure is:
+Transparent disclosure is:
 
-1. **Honest** — what you see in the repo is what was actually built, how it was built
+1. **Honest** — what you see in the repo is what was actually built
 2. **Modern practice** — collaborating productively with AI is itself an engineering skill
 3. **Reproducible** — anyone can fork this repo and use the same AI assistance
 
-Every line of code was reviewed, tested, and committed by me. The judgment calls,
-the trade-offs, the "do we ship this or rethink it" decisions — those were mine.
+</details>
 
 ---
 
