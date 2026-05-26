@@ -65,43 +65,43 @@ so you can act before headlines catch up.
 ```
 Daily / On-demand:
 
-┌─────────────────────────────────────────────────────────┐
-│  1. Fetch data                                           │
-│     yfinance: S&P 500, VIX, 10Y/3M Treasury, Gold, Oil, │
-│     DXY (~1,200 trading days, 8 series)                 │
-│     Google News RSS: 10 latest financial headlines      │
-└────────────────────────┬────────────────────────────────┘
-                         ↓
-┌─────────────────────────────────────────────────────────┐
-│  2. Feature engineering                                  │
-│     13 features: VIX lags (1/3/7d), momentum, S&P       │
-│     returns (1d/5d), realized vol, yield curve spread,  │
-│     inversion flag, gold/oil/DXY momentum                │
-└────────────────────────┬────────────────────────────────┘
-                         ↓
-┌─────────────────────────────────────────────────────────┐
-│  3. Three parallel pipelines                            │
-│     ┌─────────────┐ ┌──────────────┐ ┌────────────────┐│
-│     │ FinBERT     │ │ XGBoost      │ │ Regime         ││
-│     │ sentiment   │ │ 7-day VIX    │ │ classifier     ││
-│     │ (NEG/NEU/   │ │ forecast +   │ │ (SMA-50/200    ││
-│     │  POS)       │ │ walk-forward │ │  + rolling vol)││
-│     └─────────────┘ └──────────────┘ └────────────────┘│
-└────────────────────────┬────────────────────────────────┘
-                         ↓
-┌─────────────────────────────────────────────────────────┐
-│  4. Crisis Equation (regime-weighted fusion)             │
-│     Score = w_news(regime) × NewsRisk                   │
-│           + w_market(regime) × MarketRisk                │
-└────────────────────────┬────────────────────────────────┘
-                         ↓
-┌─────────────────────────────────────────────────────────┐
-│  5. Outputs                                              │
-│     • Crisis Risk Score (0–100) on gauge                │
-│     • Backtest equity curve + drawdown vs Buy & Hold    │
-│     • Multi-asset volatility comparison                  │
-│     • Discord alert if Score > threshold (configurable) │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  1. Fetch data                                              │
+│     yfinance: S&P 500, VIX, 10Y/3M Treasury, Gold, Oil,     │
+│     DXY (~1,200 trading days, 8 series)                     │
+│     Google News RSS: 10 latest financial headlines          │
+└──────────────────────────────┬──────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────┐
+│  2. Feature engineering                                     │
+│     13 features: VIX lags (1/3/7d), momentum, S&P           │
+│     returns (1d/5d), realized vol, yield curve spread,      │
+│     inversion flag, gold/oil/DXY momentum                   │
+└──────────────────────────────┬──────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────┐
+│  3. Three parallel pipelines                                │
+│     ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐  │
+│     │ FinBERT     │  │ XGBoost      │  │ Regime          │  │
+│     │ sentiment   │  │ 7-day VIX    │  │ classifier      │  │
+│     │ (NEG/NEU/   │  │ forecast +   │  │ (SMA-50/200     │  │
+│     │  POS)       │  │ walk-forward │  │  + rolling vol) │  │
+│     └─────────────┘  └──────────────┘  └─────────────────┘  │
+└──────────────────────────────┬──────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────┐
+│  4. Crisis Equation (regime-weighted fusion)                │
+│     Score = w_news(regime)   × NewsRisk                     │
+│           + w_market(regime) × MarketRisk                   │
+└──────────────────────────────┬──────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────┐
+│  5. Outputs                                                 │
+│     • Crisis Risk Score (0–100) on gauge                    │
+│     • Backtest equity curve + drawdown vs Buy & Hold        │
+│     • Multi-asset volatility comparison                     │
+│     • Discord alert if Score > threshold (configurable)     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -109,38 +109,38 @@ Daily / On-demand:
 ## 🏗️ Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  Presentation Layer                                       │
-│  ├── Streamlit app (5 tabs, interactive sliders)         │
-│  └── Static HTML report (auto-rebuilt weekly via cron)   │
-└──────────────────────────────────────────────────────────┘
-                            ↓
-┌──────────────────────────────────────────────────────────┐
-│  Engine Layer (engine/)                                   │
-│  ├── features.py        — 13-feature builder              │
-│  ├── ml_predictor.py    — 5 models (XGB, LGBM, Ridge,    │
-│  │                         LSTM, Naive baseline)          │
-│  ├── ai_model.py        — FinBERT sentiment wrapper       │
-│  ├── regime_detector.py — Market mood classifier          │
-│  ├── backtester.py      — Sharpe / MDD / transaction cost│
-│  ├── alerts.py          — Discord webhook                 │
-│  ├── experiment_tracker.py — MLflow integration           │
-│  └── disk_cache.py      — joblib + parquet persistence    │
-└──────────────────────────────────────────────────────────┘
-                            ↓
-┌──────────────────────────────────────────────────────────┐
-│  Data Layer (data/)                                       │
-│  ├── market_crawler.py  — yfinance (10 assets supported) │
-│  └── news_crawler.py    — Google News RSS                 │
-└──────────────────────────────────────────────────────────┘
-                            ↓
-┌──────────────────────────────────────────────────────────┐
-│  Infrastructure                                            │
-│  ├── GitHub Actions      — CI/CD + weekly cron rebuild    │
-│  ├── GitHub Pages        — Free static hosting            │
-│  ├── Docker              — Containerized deployment       │
-│  └── Streamlit Cloud     — Optional managed hosting       │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  Presentation Layer                                              │
+│  ├── Streamlit app (5 tabs, interactive sliders)                 │
+│  └── Static HTML report (auto-rebuilt weekly via cron)           │
+└────────────────────────────────┬─────────────────────────────────┘
+                                 ↓
+┌──────────────────────────────────────────────────────────────────┐
+│  Engine Layer (engine/)                                          │
+│  ├── features.py            — 13-feature builder                 │
+│  ├── ml_predictor.py        — 5 models (XGB, LGBM, Ridge,        │
+│  │                             LSTM, Naive baseline)             │
+│  ├── ai_model.py            — FinBERT sentiment wrapper          │
+│  ├── regime_detector.py     — Market mood classifier             │
+│  ├── backtester.py          — Sharpe / MDD / transaction cost    │
+│  ├── alerts.py              — Discord webhook                    │
+│  ├── experiment_tracker.py  — MLflow integration                 │
+│  └── disk_cache.py          — joblib + parquet persistence       │
+└────────────────────────────────┬─────────────────────────────────┘
+                                 ↓
+┌──────────────────────────────────────────────────────────────────┐
+│  Data Layer (data/)                                              │
+│  ├── market_crawler.py      — yfinance (10 assets supported)     │
+│  └── news_crawler.py        — Google News RSS                    │
+└────────────────────────────────┬─────────────────────────────────┘
+                                 ↓
+┌──────────────────────────────────────────────────────────────────┐
+│  Infrastructure                                                  │
+│  ├── GitHub Actions         — CI/CD + weekly cron rebuild        │
+│  ├── GitHub Pages           — Free static hosting                │
+│  ├── Docker                 — Containerized deployment           │
+│  └── Streamlit Cloud        — Optional managed hosting           │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---

@@ -63,45 +63,45 @@ Pipeline ตรวจจับ **3 สัญญาณอิสระ** หลอ
 ## 🗺️ How It Works (User Journey)
 
 ```
-รายวัน / On-demand:
+Daily / On-demand:
 
-┌─────────────────────────────────────────────────────────┐
-│  1. ดึงข้อมูล                                            │
-│     yfinance: S&P 500, VIX, Treasury 10Y/3M, Gold, Oil, │
-│     DXY (~1,200 วัน, 8 series)                          │
-│     Google News RSS: 10 พาดหัวข่าวการเงินล่าสุด        │
-└────────────────────────┬────────────────────────────────┘
-                         ↓
-┌─────────────────────────────────────────────────────────┐
-│  2. Feature engineering                                  │
-│     13 features: VIX lag (1/3/7 วัน), momentum,         │
-│     S&P returns (1d/5d), realized vol, yield curve      │
-│     spread, inversion flag, Gold/Oil/DXY momentum       │
-└────────────────────────┬────────────────────────────────┘
-                         ↓
-┌─────────────────────────────────────────────────────────┐
-│  3. 3 pipelines ทำงานคู่ขนาน                            │
-│     ┌─────────────┐ ┌──────────────┐ ┌────────────────┐│
-│     │ FinBERT     │ │ XGBoost      │ │ Regime         ││
-│     │ sentiment   │ │ ทำนาย VIX    │ │ classifier     ││
-│     │ (NEG/NEU/   │ │ 7 วัน +      │ │ (SMA-50/200    ││
-│     │  POS)       │ │ walk-forward │ │  + rolling vol)││
-│     └─────────────┘ └──────────────┘ └────────────────┘│
-└────────────────────────┬────────────────────────────────┘
-                         ↓
-┌─────────────────────────────────────────────────────────┐
-│  4. Crisis Equation (รวมแบบ regime-weighted)            │
-│     Score = w_news(regime) × NewsRisk                   │
-│           + w_market(regime) × MarketRisk                │
-└────────────────────────┬────────────────────────────────┘
-                         ↓
-┌─────────────────────────────────────────────────────────┐
-│  5. Outputs                                              │
-│     • Crisis Risk Score (0–100) บน gauge                │
-│     • Backtest equity + drawdown vs Buy & Hold          │
-│     • เปรียบเทียบ volatility ข้าม asset (10 assets)     │
-│     • Discord alert ถ้า Score เกิน threshold            │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  1. Fetch data                                              │
+│     yfinance: S&P 500, VIX, Treasury 10Y/3M, Gold, Oil,     │
+│     DXY (~1,200 days, 8 series)                             │
+│     Google News RSS: 10 latest financial headlines          │
+└──────────────────────────────┬──────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────┐
+│  2. Feature engineering                                     │
+│     13 features: VIX lag (1/3/7 days), momentum,            │
+│     S&P returns (1d/5d), realized vol, yield curve          │
+│     spread, inversion flag, Gold/Oil/DXY momentum           │
+└──────────────────────────────┬──────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────┐
+│  3. Three parallel pipelines                                │
+│     ┌─────────────┐  ┌──────────────┐  ┌─────────────────┐  │
+│     │ FinBERT     │  │ XGBoost      │  │ Regime          │  │
+│     │ sentiment   │  │ 7-day VIX    │  │ classifier      │  │
+│     │ (NEG/NEU/   │  │ forecast +   │  │ (SMA-50/200     │  │
+│     │  POS)       │  │ walk-forward │  │  + rolling vol) │  │
+│     └─────────────┘  └──────────────┘  └─────────────────┘  │
+└──────────────────────────────┬──────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────┐
+│  4. Crisis Equation (regime-weighted fusion)                │
+│     Score = w_news(regime)   × NewsRisk                     │
+│           + w_market(regime) × MarketRisk                   │
+└──────────────────────────────┬──────────────────────────────┘
+                               ↓
+┌─────────────────────────────────────────────────────────────┐
+│  5. Outputs                                                 │
+│     • Crisis Risk Score (0–100) on gauge                    │
+│     • Backtest equity + drawdown vs Buy & Hold              │
+│     • Multi-asset volatility comparison (10 assets)         │
+│     • Discord alert if Score > threshold                    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -109,38 +109,38 @@ Pipeline ตรวจจับ **3 สัญญาณอิสระ** หลอ
 ## 🏗️ Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  Presentation Layer                                       │
-│  ├── Streamlit app (5 tabs + sliders)                    │
-│  └── Static HTML report (rebuilt อัตโนมัติทุกสัปดาห์)    │
-└──────────────────────────────────────────────────────────┘
-                            ↓
-┌──────────────────────────────────────────────────────────┐
-│  Engine Layer (engine/)                                   │
-│  ├── features.py        — 13-feature builder              │
-│  ├── ml_predictor.py    — 5 โมเดล (XGB, LGBM, Ridge,     │
-│  │                         LSTM, Naive baseline)          │
-│  ├── ai_model.py        — FinBERT wrapper                 │
-│  ├── regime_detector.py — Market mood classifier          │
-│  ├── backtester.py      — Sharpe / MDD / transaction cost│
-│  ├── alerts.py          — Discord webhook                 │
-│  ├── experiment_tracker.py — MLflow                       │
-│  └── disk_cache.py      — joblib + parquet persistence    │
-└──────────────────────────────────────────────────────────┘
-                            ↓
-┌──────────────────────────────────────────────────────────┐
-│  Data Layer (data/)                                       │
-│  ├── market_crawler.py  — yfinance (10 assets)           │
-│  └── news_crawler.py    — Google News RSS                 │
-└──────────────────────────────────────────────────────────┘
-                            ↓
-┌──────────────────────────────────────────────────────────┐
-│  Infrastructure                                            │
-│  ├── GitHub Actions      — CI/CD + weekly cron rebuild    │
-│  ├── GitHub Pages        — Host รายงาน static ฟรี         │
-│  ├── Docker              — Containerized deployment       │
-│  └── Streamlit Cloud     — Optional managed hosting       │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  Presentation Layer                                              │
+│  ├── Streamlit app (5 tabs + sliders)                            │
+│  └── Static HTML report (rebuilt weekly via cron)                │
+└────────────────────────────────┬─────────────────────────────────┘
+                                 ↓
+┌──────────────────────────────────────────────────────────────────┐
+│  Engine Layer (engine/)                                          │
+│  ├── features.py            — 13-feature builder                 │
+│  ├── ml_predictor.py        — 5 models (XGB, LGBM, Ridge,        │
+│  │                             LSTM, Naive baseline)             │
+│  ├── ai_model.py            — FinBERT wrapper                    │
+│  ├── regime_detector.py     — Market mood classifier             │
+│  ├── backtester.py          — Sharpe / MDD / transaction cost    │
+│  ├── alerts.py              — Discord webhook                    │
+│  ├── experiment_tracker.py  — MLflow                             │
+│  └── disk_cache.py          — joblib + parquet persistence       │
+└────────────────────────────────┬─────────────────────────────────┘
+                                 ↓
+┌──────────────────────────────────────────────────────────────────┐
+│  Data Layer (data/)                                              │
+│  ├── market_crawler.py      — yfinance (10 assets)               │
+│  └── news_crawler.py        — Google News RSS                    │
+└────────────────────────────────┬─────────────────────────────────┘
+                                 ↓
+┌──────────────────────────────────────────────────────────────────┐
+│  Infrastructure                                                  │
+│  ├── GitHub Actions         — CI/CD + weekly cron rebuild        │
+│  ├── GitHub Pages           — Free static report hosting         │
+│  ├── Docker                 — Containerized deployment           │
+│  └── Streamlit Cloud        — Optional managed hosting           │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
