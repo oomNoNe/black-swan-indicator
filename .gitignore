@@ -38,3 +38,6 @@ Thumbs.db
 # MLflow tracking
 mlruns/
 mlartifacts/
+
+# Disk cache (joblib, parquet, pickle)
+.cache/

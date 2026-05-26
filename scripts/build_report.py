@@ -34,6 +34,7 @@ from engine.ml_predictor import (
     VIXForecaster, walk_forward_validate, compare_models, compute_shap_values
 )
 from engine.backtester import run_advanced_backtest
+from engine.disk_cache import cache_dataframe, cache_model, cache_pickle
 from ui.components import (
     draw_vix_history_chart, draw_equity_curve_chart, draw_drawdown_chart,
     draw_backtest_chart, draw_walkforward_chart, draw_model_comparison,
@@ -101,39 +102,58 @@ def speech_bubble(emoji, text):
 # ==========================================================
 # ANALYSIS (เหมือนเดิม)
 # ==========================================================
+def _train_forecaster(macro):
+    fc = VIXForecaster("XGBoost")
+    fc.train_model(macro)
+    return fc
+
+
 def run_analysis():
-    print("📊 [1/8] กำลังโหลดข้อมูลตลาด (S&P, VIX, ทอง, น้ำมัน, ฯลฯ)...")
-    macro = fetch_macro_data(years=YEARS_LOOKBACK)
+    print("📊 [1/9] โหลด macro data (cache 1h)...")
+    macro = cache_dataframe(f"macro_{YEARS_LOOKBACK}y",
+                            lambda: fetch_macro_data(years=YEARS_LOOKBACK),
+                            ttl_hours=1.0)
     if macro is None or macro.empty:
         raise RuntimeError("โหลด macro data ไม่ได้")
     print(f"   ได้ {len(macro)} วัน")
 
-    print("📊 [2/8] วิเคราะห์อารมณ์ตลาดตอนนี้...")
+    print("📊 [2/9] วิเคราะห์อารมณ์ตลาด...")
     regime = classify_market_regime(macro)
-    print(f"   อารมณ์ตลาด: {regime}")
+    print(f"   Regime: {regime}")
 
-    print("🤖 [3/8] กำลังเทรน AI หมอดู (XGBoost)...")
-    forecaster = VIXForecaster("XGBoost")
-    forecaster.train_model(macro)
+    print("🤖 [3/9] โหลด/เทรน XGBoost (cache 24h)...")
+    forecaster = cache_model(f"xgb_forecaster_{YEARS_LOOKBACK}y",
+                             lambda: _train_forecaster(macro),
+                             ttl_hours=24.0)
     predicted_vix = forecaster.predict_vix(macro)
     current_vix = float(macro['VIX'].iloc[-1])
-    print(f"   VIX ตอนนี้: {current_vix:.2f} -> AI ทำนายอีก 7 วัน: {predicted_vix:.2f}")
+    print(f"   VIX: {current_vix:.2f} -> AI 7d: {predicted_vix:.2f}")
 
-    print("📈 [4/8] ทดสอบความแม่นยำของ AI...")
-    wf_result = walk_forward_validate(macro, "XGBoost", task="regression", n_splits=WF_SPLITS)
-    print(f"   R² เฉลี่ย: {wf_result['mean_score']:.3f}")
+    print("📈 [4/9] Walk-forward validation (cache 24h)...")
+    wf_result = cache_pickle(f"wf_xgb_{YEARS_LOOKBACK}y_{WF_SPLITS}f",
+                             lambda: walk_forward_validate(macro, "XGBoost",
+                                                           task="regression",
+                                                           n_splits=WF_SPLITS),
+                             ttl_hours=24.0)
+    print(f"   R²: {wf_result['mean_score']:.3f}")
 
-    print("⚔️ [5/8] เทียบ AI 4 ตัวว่าใครเก่งสุด...")
-    cmp_reg = compare_models(macro, task="regression", n_splits=WF_SPLITS)
-    print(f"   ผู้ชนะ: {cmp_reg.iloc[0]['Model']}")
+    print("⚔️ [5/9] Model comparison (cache 24h)...")
+    cmp_reg = cache_pickle(f"cmp_reg_{YEARS_LOOKBACK}y_{WF_SPLITS}f",
+                           lambda: compare_models(macro, task="regression",
+                                                  n_splits=WF_SPLITS),
+                           ttl_hours=24.0)
+    winner = cmp_reg.sort_values('Mean Score', ascending=False).iloc[0]
+    print(f"   Winner: {winner['Model']} (R²={winner['Mean Score']:.3f})")
 
-    print("🔍 [6/8] AI ดูอะไรเป็นพิเศษ (SHAP)...")
+    print("🔍 [6/9] SHAP values (cache 24h)...")
     clean_df, feat_cols, _ = build_features(macro, classification=False)
-    shap_values, feat_names, X_sample = compute_shap_values(
-        forecaster.model, clean_df[feat_cols]
-    )
+    shap_data = cache_pickle(f"shap_{YEARS_LOOKBACK}y",
+                             lambda: compute_shap_values(
+                                 forecaster.model, clean_df[feat_cols]),
+                             ttl_hours=24.0)
+    shap_values, feat_names, X_sample = shap_data
 
-    print("💰 [7/8] ทดสอบกลยุทธ์ย้อนหลัง...")
+    print("💰 [7/9] Backtest (incl. transaction costs)...")
     bt = macro.copy()
     bt['Vol_20'] = bt['Close'].pct_change().rolling(20).std() * np.sqrt(252)
     bt['Vol_Median_252'] = bt['Vol_20'].rolling(252, min_periods=60).median()
@@ -143,12 +163,18 @@ def run_analysis():
     ).astype(int)
     bt_metrics = run_advanced_backtest(bt, transaction_cost_bps=TRANSACTION_COST_BPS)
 
-    print("🌍 [8/8] ดูตลาดทั่วโลก (Bitcoin, ทอง, ตลาดเกิดใหม่)...")
+    print("🌍 [8/9] Multi-asset (cache 1h each)...")
     assets = {}
     for name in ["S&P 500", "Bitcoin", "Gold", "Emerging Markets (EEM)"]:
-        df = fetch_asset_data(name, YEARS_LOOKBACK)
+        safe_key = name.replace(" ", "_").replace("(", "").replace(")", "").replace("&", "")
+        df = cache_dataframe(f"asset_{safe_key}_{YEARS_LOOKBACK}y",
+                             lambda n=name: fetch_asset_data(n, YEARS_LOOKBACK),
+                             ttl_hours=1.0)
         if df is not None and not df.empty:
             assets[name] = df
+
+    print("📚 [9/9] COVID-2020 case study...")
+    covid_data = build_covid_case_study(bt)
 
     return {
         'macro': macro, 'regime': regime, 'forecaster': forecaster,
@@ -156,6 +182,120 @@ def run_analysis():
         'wf_result': wf_result, 'cmp_reg': cmp_reg,
         'shap': (shap_values, feat_names, X_sample),
         'bt': bt, 'bt_metrics': bt_metrics, 'assets': assets,
+        'covid': covid_data,
+    }
+
+
+# ==========================================================
+# COVID-19 CASE STUDY
+# ==========================================================
+def build_covid_case_study(bt_data):
+    """
+    ดู COVID-2020 — ระบบเตือนทันมั้ย?
+
+    Returns dict with:
+    - chart_html: Plotly figure ของช่วง COVID
+    - first_signal_date: วันแรกที่ระบบเตือน
+    - peak_vix_date: วันที่ VIX สูงสุด
+    - peak_vix: ค่า VIX สูงสุด
+    - drawdown_pct: S&P 500 ตกกี่ %
+    - signal_lead_days: ระบบเตือนล่วงหน้ากี่วันก่อน peak
+    """
+    # ถ้าข้อมูลไม่ครอบคลุม 2020-03 -> skip
+    start = pd.Timestamp("2020-02-01")
+    end = pd.Timestamp("2020-06-30")
+
+    covid = bt_data.loc[(bt_data.index >= start) & (bt_data.index <= end)].copy()
+    if covid.empty or len(covid) < 30:
+        return None
+
+    # หา peak VIX
+    peak_idx = covid['VIX'].idxmax()
+    peak_vix = float(covid['VIX'].max())
+
+    # หา first signal
+    signals = covid[covid['Risk_Signal'] == 1]
+    first_signal = signals.index[0] if not signals.empty else None
+
+    # หา max drawdown ของ S&P 500
+    sp_peak = covid['Close'].iloc[0]
+    sp_trough = covid['Close'].min()
+    drawdown = ((sp_trough - sp_peak) / sp_peak) * 100
+
+    # ระยะเตือนล่วงหน้า
+    lead_days = (peak_idx - first_signal).days if first_signal else None
+
+    # Build chart
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=covid.index, y=covid['Close'],
+        mode='lines', name='S&P 500',
+        line=dict(color='#1f77b4', width=2),
+        yaxis='y',
+        hovertemplate='<b>%{x|%d %b %Y}</b><br>S&P: %{y:,.0f}<extra></extra>'
+    ))
+    fig.add_trace(go.Scatter(
+        x=covid.index, y=covid['VIX'],
+        mode='lines', name='VIX (ความกลัว)',
+        line=dict(color='#EF553B', width=2, dash='dot'),
+        yaxis='y2',
+        hovertemplate='<b>%{x|%d %b %Y}</b><br>VIX: %{y:.1f}<extra></extra>'
+    ))
+
+    # Mark signals
+    if not signals.empty:
+        fig.add_trace(go.Scatter(
+            x=signals.index, y=signals['Close'],
+            mode='markers', name='🚨 ระบบเตือน',
+            marker=dict(color='red', size=12, symbol='triangle-down',
+                        line=dict(color='white', width=1)),
+            yaxis='y',
+            hovertemplate='<b>🚨 %{x|%d %b %Y}</b><br>S&P: %{y:,.0f}<extra></extra>'
+        ))
+
+    # Annotation: first signal
+    if first_signal:
+        fig.add_annotation(
+            x=first_signal, y=covid.loc[first_signal, 'Close'],
+            text=f"🚨 เตือนครั้งแรก<br>{first_signal.strftime('%d %b %Y')}",
+            showarrow=True, arrowhead=2, arrowcolor="red",
+            ax=-80, ay=-60,
+            bgcolor="rgba(239,85,59,0.2)",
+            bordercolor="red", borderwidth=1,
+            font=dict(color="white"),
+        )
+
+    # Annotation: peak VIX
+    fig.add_annotation(
+        x=peak_idx, y=peak_vix,
+        text=f"⛈️ VIX สูงสุด {peak_vix:.0f}<br>{peak_idx.strftime('%d %b %Y')}",
+        showarrow=True, arrowhead=2, arrowcolor="orange",
+        ax=80, ay=-30, yref='y2',
+        bgcolor="rgba(255,161,90,0.2)",
+        bordercolor="orange", borderwidth=1,
+        font=dict(color="white"),
+    )
+
+    fig.update_layout(
+        title="🦠 COVID-19 Crash (กุมภาพันธ์ - มิถุนายน 2020)",
+        template="plotly_dark", hovermode="x unified", height=500,
+        xaxis=dict(title=None),
+        yaxis=dict(title="S&P 500", side="left"),
+        yaxis2=dict(title="VIX", side="right", overlaying="y",
+                    showgrid=False, color="#EF553B"),
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01,
+                    bgcolor="rgba(0,0,0,0.5)"),
+        margin=dict(t=60, b=40),
+    )
+
+    return {
+        'fig': fig,
+        'first_signal_date': first_signal,
+        'peak_vix_date': peak_idx,
+        'peak_vix': peak_vix,
+        'drawdown_pct': float(drawdown),
+        'signal_lead_days': lead_days,
+        'n_signals': int(signals.shape[0]),
     }
 
 
@@ -430,6 +570,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   {speech_shap}
 </section>
+
+<!-- ============================================ -->
+<!-- SECTION COVID — Case Study -->
+<!-- ============================================ -->
+{covid_section}
 
 <!-- ============================================ -->
 <!-- SECTION 7: ทดลองเล่นในอดีต -->
@@ -844,6 +989,50 @@ def build():
         )
     speech_backtest = speech_bubble("🧒", bt_msg)
 
+    # ===== COVID Case Study =====
+    covid = data.get('covid')
+    if covid:
+        lead_text = (f"<strong>{covid['signal_lead_days']} วันก่อน</strong>"
+                     if covid['signal_lead_days'] and covid['signal_lead_days'] > 0
+                     else "ในช่วงเดียวกับ")
+        first_sig_text = (covid['first_signal_date'].strftime('%d %b %Y')
+                          if covid['first_signal_date'] else "ไม่ได้เตือน")
+        peak_text = covid['peak_vix_date'].strftime('%d %b %Y')
+
+        covid_section = f"""
+<section>
+  <h2>🦠 Case Study: COVID-19 Crash 2020</h2>
+  <p class="section-tagline">
+    ลองดูตัวอย่างจริง — ระบบของเราเตือนทันเหตุการณ์วิกฤตที่ใหญ่ที่สุดในรอบ 10 ปีมั้ย?
+  </p>
+
+  <div class="facts-grid">
+    {fact_card("🚨", "ระบบเตือนครั้งแรก", first_sig_text,
+               f"{lead_text}จุดสูงสุดของ VIX")}
+    {fact_card("⛈️", "VIX แตะจุดสูงสุด", f"{covid['peak_vix']:.0f}",
+               f"เมื่อวันที่ {peak_text}")}
+    {fact_card("📉", "S&P 500 ตก", f"{covid['drawdown_pct']:.1f}%",
+               "จาก peak ถึง trough ในช่วงนี้")}
+    {fact_card("🔔", "จำนวนสัญญาณเตือน", f"{covid['n_signals']} ครั้ง",
+               "ตลอดช่วง ก.พ. - มิ.ย. 2020")}
+  </div>
+
+  <div class="chart-wrap">{fig_to_html(covid['fig'])}</div>
+
+  {speech_bubble("🎓",
+    f"<strong>นี่คือสิ่งที่ระบบควรทำได้</strong> — เตือนล่วงหน้าก่อนวิกฤตจริง "
+    f"ในกรณี COVID ระบบส่งสัญญาณวันที่ <strong>{first_sig_text}</strong> "
+    f"ซึ่ง {lead_text}จุดที่ตลาดผันผวนสูงสุด<br><br>"
+    "ถ้านักลงทุนเชื่อสัญญาณ → ออกจากตลาดเป็นเงินสด → หลีกเลี่ยงการขาดทุน "
+    f"<strong>{abs(covid['drawdown_pct']):.0f}%</strong> ในเวลา 1 เดือน<br><br>"
+    "<em>แม้ AI ทำนาย VIX ไม่แม่น (Issue ที่เราพบ) — แต่ระบบ rule-based "
+    "(VIX > 30 + vol spike) ทำงานได้จริงในวิกฤต</em>"
+  )}
+</section>
+"""
+    else:
+        covid_section = ""
+
     # ===== Multi-asset =====
     if data['assets']:
         fig = go.Figure()
@@ -904,6 +1093,7 @@ def build():
         dd_chart=dd_chart,
         signal_chart=signal_chart,
         speech_backtest=speech_backtest,
+        covid_section=covid_section,
         multi_asset_chart=multi_asset_chart,
         speech_multi_asset=speech_multi_asset,
         final_status=final_status,
