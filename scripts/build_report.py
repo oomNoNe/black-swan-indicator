@@ -38,7 +38,7 @@ from engine.disk_cache import cache_dataframe, cache_model, cache_pickle
 from ui.components import (
     draw_vix_history_chart, draw_equity_curve_chart, draw_drawdown_chart,
     draw_backtest_chart, draw_walkforward_chart, draw_model_comparison,
-    draw_shap_summary,
+    draw_shap_summary, draw_animated_vix_timeline, draw_3d_volatility,
 )
 
 
@@ -607,6 +607,29 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </section>
 
 <!-- ============================================ -->
+<!-- SECTION ANIMATED + 3D -->
+<!-- ============================================ -->
+<section>
+  <h2>🎬 ดู VIX เปลี่ยนแปลงตามเวลา</h2>
+  <p class="section-tagline">
+    กดปุ่ม <strong>▶️ Play</strong> ดูประวัติ VIX ตั้งแต่ {years} ปีที่แล้ว — เห็นช่วง COVID, สงคราม,
+    การขึ้นดอกเบี้ย ได้ทั้งหมด
+  </p>
+  <div class="chart-wrap">{animated_chart}</div>
+  {speech_animated}
+</section>
+
+<section>
+  <h2>🌐 3D — มองตลาดจากมุมใหม่</h2>
+  <p class="section-tagline">
+    เห็นความสัมพันธ์ระหว่าง <strong>เวลา × ผลตอบแทน × ความกลัว</strong> พร้อมกัน
+    หมุนกราฟด้วย mouse — drag, scroll เพื่อ zoom
+  </p>
+  <div class="chart-wrap">{volatility_3d_chart}</div>
+  {speech_3d}
+</section>
+
+<!-- ============================================ -->
 <!-- SECTION 8: ตลาดทั่วโลก -->
 <!-- ============================================ -->
 <section>
@@ -989,6 +1012,24 @@ def build():
         )
     speech_backtest = speech_bubble("🧒", bt_msg)
 
+    # ===== Animated + 3D =====
+    animated_chart = fig_to_html(draw_animated_vix_timeline(data['macro'], step_months=3))
+    volatility_3d_chart = fig_to_html(draw_3d_volatility(data['macro']))
+
+    speech_animated = speech_bubble(
+        "🎬",
+        "กราฟแบบนี้เห็นได้ว่า VIX <strong>พุ่งทุกครั้งที่มีวิกฤต</strong> — "
+        "ก.พ. 2020 (COVID), ก.พ. 2022 (สงครามรัสเซีย-ยูเครน), ก.ย. 2022 (เงินเฟ้อ) "
+        "<br><br>ลองกดเล่นดูเส้นจะค่อยๆ ขึ้นทีละเดือน เหมือนดู timelapse"
+    )
+    speech_3d = speech_bubble(
+        "🌐",
+        "<strong>ลองหมุนดู!</strong> Mouse drag = หมุน, Scroll = zoom<br><br>"
+        "จุดสีแดง = VIX สูง (ตลาดกลัว) | สีเขียว = VIX ต่ำ (ตลาดสงบ)<br>"
+        "สังเกตว่า <strong>จุดแดงมักอยู่ในวันที่ S&P -3% หรือมากกว่า</strong> — "
+        "พอตลาดตกแรง ความกลัวก็พุ่ง"
+    )
+
     # ===== COVID Case Study =====
     covid = data.get('covid')
     if covid:
@@ -1093,6 +1134,10 @@ def build():
         dd_chart=dd_chart,
         signal_chart=signal_chart,
         speech_backtest=speech_backtest,
+        animated_chart=animated_chart,
+        volatility_3d_chart=volatility_3d_chart,
+        speech_animated=speech_animated,
+        speech_3d=speech_3d,
         covid_section=covid_section,
         multi_asset_chart=multi_asset_chart,
         speech_multi_asset=speech_multi_asset,

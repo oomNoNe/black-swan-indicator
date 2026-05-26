@@ -328,6 +328,127 @@ def draw_walkforward_chart(predictions_df, task="regression"):
 # ==========================================================
 # MODEL COMPARISON BAR CHART
 # ==========================================================
+def draw_animated_vix_timeline(df, step_months=3):
+    """
+    Animated VIX timeline — Play button + slider เลือกเดือน
+    เลื่อนดูตามเวลาได้เหมือนกราฟ COVID dashboard
+    """
+    df = df.copy()
+    df['YearMonth'] = df.index.to_period('M').to_timestamp()
+
+    # สร้าง frames ทุกเดือน (cumulative — แต่ละ frame เพิ่มข้อมูลใหม่)
+    frames = []
+    months = sorted(df['YearMonth'].unique())[::step_months]
+
+    for end_month in months:
+        sub = df[df['YearMonth'] <= end_month]
+        frames.append(go.Frame(
+            name=str(end_month.date()),
+            data=[
+                go.Scatter(x=sub.index, y=sub['VIX'], mode='lines',
+                           line=dict(color='#1f77b4', width=2), name='VIX'),
+            ],
+            layout=go.Layout(
+                title_text=f"📅 VIX ถึง {end_month.strftime('%b %Y')}",
+            )
+        ))
+
+    # Initial frame
+    init = df[df['YearMonth'] <= months[0]]
+    fig = go.Figure(
+        data=[go.Scatter(x=init.index, y=init['VIX'], mode='lines',
+                         line=dict(color='#1f77b4', width=2), name='VIX')],
+        frames=frames,
+    )
+
+    # Threshold lines
+    fig.add_hline(y=20, line_dash="dot", line_color="gray",
+                  annotation_text="ปกติ", annotation_position="right")
+    fig.add_hline(y=30, line_dash="dash", line_color="orange",
+                  annotation_text="ระวัง", annotation_position="right")
+    fig.add_hline(y=40, line_dash="dash", line_color="red",
+                  annotation_text="วิกฤต", annotation_position="right")
+
+    # Play button + slider
+    fig.update_layout(
+        title="🎬 VIX Animated Timeline (กดปุ่ม Play)",
+        template="plotly_dark", height=520,
+        xaxis=dict(range=[df.index.min(), df.index.max()], title=None),
+        yaxis=dict(range=[0, df['VIX'].max() * 1.1], title="VIX"),
+        margin=dict(t=80, b=120),
+        updatemenus=[dict(
+            type="buttons", direction="left", x=0.05, y=-0.18,
+            xanchor="left", yanchor="top",
+            buttons=[
+                dict(label="▶️ Play",
+                     method="animate",
+                     args=[None, {"frame": {"duration": 250, "redraw": True},
+                                  "fromcurrent": True, "transition": {"duration": 100}}]),
+                dict(label="⏸ Pause",
+                     method="animate",
+                     args=[[None], {"frame": {"duration": 0, "redraw": False},
+                                    "mode": "immediate", "transition": {"duration": 0}}]),
+            ],
+        )],
+        sliders=[dict(
+            active=0, x=0.15, y=-0.15, len=0.8,
+            currentvalue=dict(prefix="เดือน: ", font=dict(size=14)),
+            steps=[dict(method="animate", label=f.name[:7],
+                        args=[[f.name], {"frame": {"duration": 0, "redraw": True},
+                                         "mode": "immediate"}])
+                   for f in frames]
+        )],
+    )
+    return fig
+
+
+def draw_3d_volatility(df):
+    """
+    3D scatter — แสดง relationship ระหว่าง:
+    - X: เวลา (ลำดับวัน)
+    - Y: S&P daily return %
+    - Z: VIX level
+    Color: VIX level (gradient red-yellow-green)
+    หมุนได้ด้วย mouse drag
+    """
+    df = df.copy()
+    df['Return_Pct'] = df['Close'].pct_change() * 100
+    df = df.dropna(subset=['Return_Pct', 'VIX'])
+    # ลด density (เอา 1 วันต่อสัปดาห์เพื่อให้ chart ไม่หนัก)
+    df_sample = df.iloc[::5]
+
+    fig = go.Figure(data=[go.Scatter3d(
+        x=df_sample.index, y=df_sample['Return_Pct'], z=df_sample['VIX'],
+        mode='markers',
+        marker=dict(
+            size=4,
+            color=df_sample['VIX'],
+            colorscale=[[0, '#00cc96'], [0.4, '#FFA15A'], [1, '#EF553B']],
+            cmin=10, cmax=50,
+            colorbar=dict(title="VIX", thickness=15, len=0.6),
+            opacity=0.8,
+        ),
+        text=[f"<b>{d.strftime('%d %b %Y')}</b><br>"
+              f"S&P return: {r:+.2f}%<br>VIX: {v:.1f}"
+              for d, r, v in zip(df_sample.index, df_sample['Return_Pct'], df_sample['VIX'])],
+        hoverinfo='text',
+    )])
+
+    fig.update_layout(
+        title="🌐 3D View — เวลา × ผลตอบแทน × ความกลัว (หมุนได้ด้วย mouse drag)",
+        template="plotly_dark", height=620,
+        scene=dict(
+            xaxis=dict(title='วันที่'),
+            yaxis=dict(title='S&P 500 Return (%)'),
+            zaxis=dict(title='VIX'),
+            bgcolor='rgba(14,17,23,1)',
+            camera=dict(eye=dict(x=1.6, y=1.6, z=0.8)),
+        ),
+        margin=dict(l=0, r=0, t=60, b=0),
+    )
+    return fig
+
+
 def draw_model_comparison(comparison_df):
     """Model comparison chart — แก้ปัญหา error bar ทับ text"""
     if comparison_df is None or comparison_df.empty:
