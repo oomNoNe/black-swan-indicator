@@ -182,6 +182,58 @@ backtests omit this** and overstate strategy performance.
 
 ---
 
+## 🎓 Research Methodology
+
+This project is structured as a **comparative study** answering one research
+question:
+
+> *"Does combining financial-news sentiment with ML forecasting and rule-based
+> regime detection produce risk-adjusted returns superior to a simple Buy & Hold
+> strategy?"*
+
+Following the 5-step statistical inference framework:
+
+### 1. Hypothesis
+- **H₀ (Null)**: The Black Swan strategy performs no better than Buy & Hold
+  on a risk-adjusted basis: `Sharpe_strategy ≤ Sharpe_BH`
+- **H₁ (Alternative)**: The Black Swan strategy delivers superior risk-adjusted
+  returns: `Sharpe_strategy > Sharpe_BH`
+
+### 2. Significance Level (α)
+- **α = 0.05** for any formal tests (standard academic threshold)
+- Walk-forward cross-validation with **k = 5 folds** to reduce single-split bias
+- All ML forecasting compared against **Naive persistence baseline**
+  (must beat baseline to be considered useful)
+
+### 3. Test Statistics
+| Question | Metric used |
+|---|---|
+| Forecast accuracy | **R² (walk-forward mean ± std)** vs Naive baseline |
+| Strategy outperformance | **Sharpe Ratio** delta (strategy − B&H) |
+| Tail risk reduction | **Max Drawdown** comparison |
+| Trade quality | **Win Rate** + **Profit Factor** |
+| Crisis detection | Lead time before market peak (case study) |
+
+### 4. Calculation
+- **Data**: ~1,259 trading days (5 years), 8 macro series (yfinance)
+- **Backtest realism**: transaction cost = 10 bps per turnover
+- **Validation**: TimeSeriesSplit (no shuffle, prevents look-ahead)
+- **Replication**: cached models in `.cache/` for reproducibility
+
+### 5. Conclusion
+- ❌ **ML forecasting fails to beat Naive baseline** (R² ≈ 0.09 for Naive,
+  negative for all ML models). Fails to reject H₀ for predictive task.
+- ✅ **Rule-based crisis detector validated on COVID-19 case study**
+  (signal fired 7 days before VIX peaked at 82.69).
+- ⚠️ **In bull markets, defensive strategy underperforms Buy & Hold** — the
+  value of crash-avoidance only shows during actual crises (insufficient
+  sample size for formal test).
+
+**Future statistical work**: Add Diebold-Mariano test for forecast accuracy,
+bootstrap CI for Sharpe difference, paired t-test on daily returns.
+
+---
+
 ## 🧠 Engineering Challenges
 
 The non-obvious decisions that took the longest to solve:
@@ -376,6 +428,41 @@ Honest, scoped roadmap (no vaporware):
 - [ ] Reinforcement learning for position sizing
 - [ ] Transformer-based sentiment (replace FinBERT with FinGPT)
 - [ ] Bayesian uncertainty quantification on predictions
+
+---
+
+## 🤝 AI-Assisted Development (Transparency Statement)
+
+This project was built collaboratively with **Claude (Anthropic)** as a coding
+assistant throughout — from initial scaffold to architecture decisions,
+debugging, and documentation.
+
+### What AI helped with
+- 💻 Boilerplate code generation (Streamlit, Plotly chart factories, ML pipeline)
+- 🐛 Debugging runtime errors + type warnings (Pylance, edge cases)
+- 📐 Suggesting architecture patterns (layered separation, disk cache design)
+- 📝 Drafting documentation (both READMEs, MEDIUM_POST.md)
+- 🎨 HTML/CSS template scaffolding for the static report
+
+### What I (the developer) owned
+- 🎯 **Problem definition & scope** — choosing financial crisis detection as the domain
+- 📊 **Methodology decisions** — walk-forward CV, naive baseline, COVID case study framing
+- 🧪 **Critical evaluation** — accepting that Naive beats ML (rather than hiding it)
+- ✅ **Verification** — running every test, validating every commit, debugging
+- 🚀 **Deployment & iteration** — GitHub setup, Pages config, prioritization
+- 📐 **Domain interpretation** — knowing what VIX > 30 means in context
+
+### Why disclose this?
+AI-assisted development is standard in 2025+ software engineering — GitHub Copilot,
+Cursor, Claude Code, and similar tools are widely adopted across the industry.
+I believe transparent disclosure is:
+
+1. **Honest** — what you see in the repo is what was actually built, how it was built
+2. **Modern practice** — collaborating productively with AI is itself an engineering skill
+3. **Reproducible** — anyone can fork this repo and use the same AI assistance
+
+Every line of code was reviewed, tested, and committed by me. The judgment calls,
+the trade-offs, the "do we ship this or rethink it" decisions — those were mine.
 
 ---
 
