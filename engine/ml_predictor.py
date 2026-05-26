@@ -25,16 +25,26 @@ def _make_model(name, task):
     """Factory: สร้าง model instance ตามชื่อ + task type"""
     if task == "regression":
         if name == "XGBoost":
-            return xgb.XGBRegressor(objective='reg:squarederror', n_estimators=150,
-                                    learning_rate=0.05, max_depth=4, verbosity=0)
+            # tuned: regularize มากขึ้น เพื่อ generalize ดีขึ้นบน VIX
+            return xgb.XGBRegressor(
+                objective='reg:squarederror', n_estimators=100,
+                learning_rate=0.03, max_depth=3,
+                reg_alpha=0.5, reg_lambda=1.5, min_child_weight=5,
+                subsample=0.8, colsample_bytree=0.8, verbosity=0
+            )
         if name == "LightGBM":
-            return lgb.LGBMRegressor(n_estimators=150, learning_rate=0.05,
-                                     max_depth=4, num_leaves=15, verbose=-1)
+            return lgb.LGBMRegressor(
+                n_estimators=100, learning_rate=0.03, max_depth=3, num_leaves=7,
+                reg_alpha=0.5, reg_lambda=1.5, min_child_samples=20,
+                subsample=0.8, colsample_bytree=0.8, verbose=-1
+            )
         if name == "Ridge":
             return Ridge(alpha=1.0)
         if name == "LSTM":
-            # ลด epochs เพื่อความเร็วใน walk-forward (5 folds × 30 epochs = สมเหตุสมผล)
             return LSTMRegressor(seq_length=10, hidden_size=32, epochs=30, batch_size=32)
+        if name == "Naive":
+            # Baseline ที่สำคัญ: เดาว่า VIX 7 วันข้างหน้า = VIX วันนี้
+            return _NaivePersistence()
     elif task == "classification":
         if name == "XGBoost":
             return xgb.XGBClassifier(n_estimators=150, learning_rate=0.05,
@@ -48,9 +58,41 @@ def _make_model(name, task):
 
 
 SUPPORTED_MODELS = {
-    "regression": ["XGBoost", "LightGBM", "Ridge", "LSTM"],
+    "regression": ["Naive", "XGBoost", "LightGBM", "Ridge", "LSTM"],
     "classification": ["XGBoost", "LightGBM", "LogReg"],
 }
+
+
+# ==========================================================
+# NAIVE BASELINE — "เดาว่าพรุ่งนี้ = วันนี้"
+# ==========================================================
+class _NaivePersistence:
+    """
+    Baseline ที่สำคัญสุดใน time-series forecasting:
+    ทำนายว่าค่าในอนาคต = ค่าล่าสุดที่เห็น (persistence model)
+
+    ใช้ VIX_Lag1 (VIX เมื่อวาน) เป็นคำทำนายของ VIX อีก 7 วัน
+    ถ้าโมเดล ML ที่เราสร้างไม่ชนะ baseline นี้ = โมเดลใช้ไม่ได้
+    """
+    def __init__(self):
+        self.last_vix_col_idx = None
+
+    def fit(self, X, y=None):
+        # หา column VIX_Lag1 ใน DataFrame หรือ array
+        if hasattr(X, 'columns'):
+            cols = list(X.columns)
+            if 'VIX_Lag1' in cols:
+                self.last_vix_col_idx = cols.index('VIX_Lag1')
+            else:
+                self.last_vix_col_idx = 0
+        else:
+            self.last_vix_col_idx = 0
+        return self
+
+    def predict(self, X):
+        if hasattr(X, 'values'):
+            return X.values[:, self.last_vix_col_idx]
+        return np.asarray(X)[:, self.last_vix_col_idx]
 
 
 # ==========================================================

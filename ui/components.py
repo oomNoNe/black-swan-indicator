@@ -5,6 +5,37 @@ import numpy as np
 
 
 # ==========================================================
+# Interactive time-series helpers (TradingView-style)
+# ==========================================================
+def _add_time_controls(fig):
+    """เพิ่ม Range Slider + Range Selector buttons + spike lines"""
+    fig.update_xaxes(
+        rangeslider=dict(visible=True, thickness=0.05, bgcolor="rgba(255,255,255,0.05)"),
+        rangeselector=dict(
+            buttons=[
+                dict(count=1, label="1ด", step="month", stepmode="backward"),
+                dict(count=3, label="3ด", step="month", stepmode="backward"),
+                dict(count=6, label="6ด", step="month", stepmode="backward"),
+                dict(count=1, label="YTD", step="year", stepmode="todate"),
+                dict(count=1, label="1ปี", step="year", stepmode="backward"),
+                dict(count=3, label="3ปี", step="year", stepmode="backward"),
+                dict(step="all", label="ทั้งหมด"),
+            ],
+            bgcolor="rgba(31,119,180,0.15)",
+            activecolor="#1f77b4",
+            font=dict(color="white", size=11),
+            x=0.0, y=1.12,
+        ),
+        showspikes=True, spikemode="across", spikesnap="cursor",
+        spikecolor="#888", spikethickness=1, spikedash="dot",
+    )
+    fig.update_yaxes(showspikes=True, spikemode="across",
+                     spikecolor="#888", spikethickness=1, spikedash="dot")
+    fig.update_layout(hoverdistance=100, spikedistance=1000)
+    return fig
+
+
+# ==========================================================
 # GAUGE CHART — Crisis Risk Score
 # ==========================================================
 def draw_gauge_chart(score):
@@ -43,25 +74,34 @@ def color_sentiment(val):
 # ==========================================================
 # VIX HISTORY + PREDICTION
 # ==========================================================
-def draw_vix_history_chart(df, predicted_vix=None, lookback_days=180):
-    """กราฟ VIX ย้อนหลัง + จุดทำนายล่วงหน้า 7 วัน + threshold lines"""
-    recent = df.tail(lookback_days)
+def draw_vix_history_chart(df, predicted_vix=None, lookback_days=None, full_history=True):
+    """
+    กราฟ VIX ย้อนหลัง + จุดทำนายล่วงหน้า 7 วัน + threshold lines
+    full_history=True -> ใช้ข้อมูลทั้งหมด + range slider (เริ่มซูม 6 เดือน)
+    full_history=False -> crop เฉพาะ lookback_days
+    """
+    if full_history:
+        recent = df
+    else:
+        recent = df.tail(lookback_days or 180)
 
     fig = go.Figure()
 
     # Historical VIX line
     fig.add_trace(go.Scatter(
         x=recent.index, y=recent['VIX'],
-        mode='lines', name='VIX (Historical)',
-        line=dict(color='#1f77b4', width=2)
+        mode='lines', name='VIX จริง',
+        line=dict(color='#1f77b4', width=1.5),
+        hovertemplate='<b>%{x|%d %b %Y}</b><br>VIX: %{y:.2f}<extra></extra>'
     ))
 
     # 20-day rolling mean (smoother)
     recent_mean = recent['VIX'].rolling(20).mean()
     fig.add_trace(go.Scatter(
         x=recent.index, y=recent_mean,
-        mode='lines', name='VIX 20-day MA',
-        line=dict(color='#FFA15A', width=1.5, dash='dot')
+        mode='lines', name='เฉลี่ย 20 วัน',
+        line=dict(color='#FFA15A', width=1.5, dash='dot'),
+        hovertemplate='<b>%{x|%d %b %Y}</b><br>MA20: %{y:.2f}<extra></extra>'
     ))
 
     # Predicted point (7 days ahead)
@@ -71,22 +111,37 @@ def draw_vix_history_chart(df, predicted_vix=None, lookback_days=180):
             x=[recent.index[-1], future_date],
             y=[recent['VIX'].iloc[-1], predicted_vix],
             mode='lines+markers',
-            name='AI Forecast (7d)',
-            line=dict(color='#EF553B', width=2, dash='dash'),
-            marker=dict(size=12, symbol='star')
+            name='AI ทำนาย 7 วัน',
+            line=dict(color='#EF553B', width=2.5, dash='dash'),
+            marker=dict(size=14, symbol='star'),
+            hovertemplate='<b>%{x|%d %b %Y}</b><br>คาดการณ์: %{y:.2f}<extra></extra>'
         ))
 
     # Crisis threshold lines
-    fig.add_hline(y=20, line_dash="dot", line_color="gray", annotation_text="Normal (20)", annotation_position="right")
-    fig.add_hline(y=30, line_dash="dash", line_color="orange", annotation_text="Caution (30)", annotation_position="right")
-    fig.add_hline(y=40, line_dash="dash", line_color="red", annotation_text="Crisis (40)", annotation_position="right")
+    fig.add_hline(y=20, line_dash="dot", line_color="gray",
+                  annotation_text="ปกติ (20)", annotation_position="right")
+    fig.add_hline(y=30, line_dash="dash", line_color="orange",
+                  annotation_text="ระวัง (30)", annotation_position="right")
+    fig.add_hline(y=40, line_dash="dash", line_color="red",
+                  annotation_text="วิกฤต (40)", annotation_position="right")
 
     fig.update_layout(
-        title="VIX History & 7-Day AI Forecast",
-        xaxis_title="Date", yaxis_title="VIX Level",
+        title="📈 VIX (อุณหภูมิตลาด) + AI ทำนาย",
+        xaxis_title=None, yaxis_title="VIX",
         template="plotly_dark", hovermode="x unified",
-        height=400, legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+        height=520,
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01,
+                    bgcolor="rgba(0,0,0,0.5)"),
+        margin=dict(t=80, b=80),
     )
+
+    if full_history:
+        _add_time_controls(fig)
+        # Default zoom = ล่าสุด 6 เดือน
+        end = recent.index[-1]
+        start = end - pd.Timedelta(days=180)
+        fig.update_xaxes(range=[start, end + pd.Timedelta(days=14)])
+
     return fig
 
 
@@ -119,38 +174,43 @@ def draw_feature_importance(forecaster):
 # BACKTEST: PRICE + SIGNALS
 # ==========================================================
 def draw_backtest_chart(df):
-    """กราฟราคา S&P 500 + จุดสัญญาณวิกฤต"""
+    """กราฟราคา S&P 500 + จุดสัญญาณวิกฤต — interactive แบบ TradingView"""
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
         x=df.index, y=df['Close'],
-        mode='lines', name='S&P 500 Index',
-        line=dict(color='#1f77b4', width=2)
+        mode='lines', name='S&P 500',
+        line=dict(color='#1f77b4', width=1.5),
+        hovertemplate='<b>%{x|%d %b %Y}</b><br>S&P 500: %{y:,.0f}<extra></extra>'
     ))
 
     if 'Risk_Signal' in df.columns:
         signals = df[df['Risk_Signal'] == 1]
-        fig.add_trace(go.Scatter(
-            x=signals.index, y=signals['Close'],
-            mode='markers', name='Black Swan Signal',
-            marker=dict(color='red', size=10, symbol='triangle-down',
-                        line=dict(color='white', width=1))
-        ))
+        if not signals.empty:
+            fig.add_trace(go.Scatter(
+                x=signals.index, y=signals['Close'],
+                mode='markers', name='🚨 สัญญาณเตือน',
+                marker=dict(color='red', size=10, symbol='triangle-down',
+                            line=dict(color='white', width=1)),
+                hovertemplate='<b>🚨 เตือน: %{x|%d %b %Y}</b><br>ราคา: %{y:,.0f}<extra></extra>'
+            ))
 
     fig.update_layout(
-        title="S&P 500 with Crisis Signals",
-        xaxis_title="Date", yaxis_title="Index Price",
+        title="📊 S&P 500 + จุดสัญญาณเตือนวิกฤต",
+        xaxis_title=None, yaxis_title="ราคา",
         template="plotly_dark", hovermode="x unified",
-        height=420, legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+        height=520, margin=dict(t=80, b=80),
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01,
+                    bgcolor="rgba(0,0,0,0.5)"),
     )
-    return fig
+    return _add_time_controls(fig)
 
 
 # ==========================================================
 # BACKTEST: EQUITY CURVE COMPARISON
 # ==========================================================
 def draw_equity_curve_chart(df):
-    """กราฟเปรียบเทียบ cumulative return ของ Strategy vs Buy & Hold"""
+    """กราฟเปรียบเทียบ cumulative return — interactive"""
     work = df.dropna(subset=['Market_Return', 'Strategy_Return']).copy()
     work['Cum_BuyHold'] = (1 + work['Market_Return']).cumprod()
     work['Cum_Strategy'] = (1 + work['Strategy_Return']).cumprod()
@@ -158,29 +218,33 @@ def draw_equity_curve_chart(df):
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=work.index, y=work['Cum_BuyHold'],
-        mode='lines', name='Buy & Hold',
-        line=dict(color='#888888', width=2)
+        mode='lines', name='📊 ซื้อแล้วถือเฉยๆ',
+        line=dict(color='#888888', width=2),
+        hovertemplate='<b>%{x|%d %b %Y}</b><br>Buy&Hold: %{y:.3f}×<extra></extra>'
     ))
     fig.add_trace(go.Scatter(
         x=work.index, y=work['Cum_Strategy'],
-        mode='lines', name='Black Swan Strategy',
-        line=dict(color='#00cc96', width=2)
+        mode='lines', name='🛡️ กลยุทธ์เรา',
+        line=dict(color='#00cc96', width=2),
+        hovertemplate='<b>%{x|%d %b %Y}</b><br>Strategy: %{y:.3f}×<extra></extra>'
     ))
 
     fig.update_layout(
-        title="Cumulative Equity Curve (1 = Initial Capital)",
-        xaxis_title="Date", yaxis_title="Portfolio Value (×)",
+        title="💰 เงินทุนเติบโตยังไง (1 = ทุนเริ่มต้น)",
+        xaxis_title=None, yaxis_title="มูลค่าพอร์ต (เท่า)",
         template="plotly_dark", hovermode="x unified",
-        height=380, legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+        height=500, margin=dict(t=80, b=80),
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01,
+                    bgcolor="rgba(0,0,0,0.5)"),
     )
-    return fig
+    return _add_time_controls(fig)
 
 
 # ==========================================================
 # BACKTEST: DRAWDOWN COMPARISON
 # ==========================================================
 def draw_drawdown_chart(df):
-    """กราฟเปรียบเทียบ Drawdown ของ Strategy vs Buy & Hold"""
+    """Drawdown ทั้ง 2 แบบ — interactive"""
     work = df.dropna(subset=['Market_Return', 'Strategy_Return']).copy()
     cum_bh = (1 + work['Market_Return']).cumprod()
     cum_st = (1 + work['Strategy_Return']).cumprod()
@@ -189,21 +253,27 @@ def draw_drawdown_chart(df):
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=work.index, y=dd_bh, mode='lines', name='Buy & Hold DD',
-        line=dict(color='#888888', width=1.5), fill='tozeroy', fillcolor='rgba(136,136,136,0.2)'
+        x=work.index, y=dd_bh, mode='lines', name='📊 ซื้อแล้วถือ',
+        line=dict(color='#888888', width=1.5), fill='tozeroy',
+        fillcolor='rgba(136,136,136,0.2)',
+        hovertemplate='<b>%{x|%d %b %Y}</b><br>B&H DD: %{y:.2f}%<extra></extra>'
     ))
     fig.add_trace(go.Scatter(
-        x=work.index, y=dd_st, mode='lines', name='Strategy DD',
-        line=dict(color='#EF553B', width=1.5), fill='tozeroy', fillcolor='rgba(239,85,59,0.3)'
+        x=work.index, y=dd_st, mode='lines', name='🛡️ กลยุทธ์เรา',
+        line=dict(color='#EF553B', width=1.5), fill='tozeroy',
+        fillcolor='rgba(239,85,59,0.3)',
+        hovertemplate='<b>%{x|%d %b %Y}</b><br>Strategy DD: %{y:.2f}%<extra></extra>'
     ))
 
     fig.update_layout(
-        title="Drawdown Comparison (%)",
-        xaxis_title="Date", yaxis_title="Drawdown (%)",
+        title="📉 ขาดทุนสะสมสูงสุด (Drawdown)",
+        xaxis_title=None, yaxis_title="Drawdown (%)",
         template="plotly_dark", hovermode="x unified",
-        height=320, legend=dict(yanchor="bottom", y=0.01, xanchor="left", x=0.01)
+        height=420, margin=dict(t=80, b=80),
+        legend=dict(yanchor="bottom", y=0.01, xanchor="left", x=0.01,
+                    bgcolor="rgba(0,0,0,0.5)"),
     )
-    return fig
+    return _add_time_controls(fig)
 
 
 # ==========================================================
@@ -259,29 +329,82 @@ def draw_walkforward_chart(predictions_df, task="regression"):
 # MODEL COMPARISON BAR CHART
 # ==========================================================
 def draw_model_comparison(comparison_df):
-    """แสดงผลเปรียบเทียบโมเดลแบบ horizontal bar with error bars"""
+    """Model comparison chart — แก้ปัญหา error bar ทับ text"""
     if comparison_df is None or comparison_df.empty:
         return None
 
-    df = comparison_df.dropna(subset=['Mean Score']).sort_values('Mean Score')
+    df = comparison_df.dropna(subset=['Mean Score']).sort_values('Mean Score').reset_index(drop=True)
     if df.empty:
         return None
+
+    metric = df['Metric'].iloc[0] if 'Metric' in df.columns else "Score"
+
+    # สี: ผู้ชนะเขียว, อันดับ 2-3 ส้ม, อันดับสุดท้ายแดง
+    n = len(df)
+    colors = []
+    for i in range(n):
+        if i == n - 1:  # อันดับสูงสุด (มาท้ายเพราะ sort ascending)
+            colors.append("#00cc96")
+        elif i == 0:    # อันดับท้ายสุด (อยู่บนเพราะ sort ascending)
+            colors.append("#EF553B")
+        else:
+            colors.append("#FFA15A")
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=df['Mean Score'], y=df['Model'], orientation='h',
-        error_x=dict(type='data', array=df['Std Score'], color='white'),
-        marker=dict(color=df['Mean Score'], colorscale='Viridis', showscale=False),
-        text=[f"{v:.3f} ± {s:.3f}" for v, s in zip(df['Mean Score'], df['Std Score'])],
-        textposition='outside',
+        error_x=dict(
+            type='data', array=df['Std Score'],
+            color='rgba(255,255,255,0.6)', thickness=2, width=8
+        ),
+        marker=dict(color=colors, line=dict(color='rgba(255,255,255,0.2)', width=1)),
+        # ใส่ค่าใน hover แทน (เลี่ยงทับ error bar)
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            f"{metric}: <b>%{{x:.3f}}</b><br>"
+            "ส่วนเบี่ยงเบน: ±%{customdata:.3f}<extra></extra>"
+        ),
+        customdata=df['Std Score'],
+        showlegend=False,
     ))
-    metric = df['Metric'].iloc[0] if 'Metric' in df.columns else "Score"
+
+    # ใส่ medal annotation แทน text บนแท่ง
+    medals = []
+    for i in range(n):
+        rank_from_top = n - i  # 1 = best (ขวาสุด)
+        emoji = "🥇" if rank_from_top == 1 else "🥈" if rank_from_top == 2 else "🥉" if rank_from_top == 3 else ""
+        medals.append(emoji)
+
+    # วาง medal ด้านขวาของแต่ละแท่ง พ้น error bar
+    max_x = (df['Mean Score'] + df['Std Score']).max()
+    min_x = (df['Mean Score'] - df['Std Score']).min()
+    padding = (max_x - min_x) * 0.05
+
+    for i, row in df.iterrows():
+        if medals[i]:
+            fig.add_annotation(
+                x=row['Mean Score'] + row['Std Score'] + padding,
+                y=row['Model'],
+                text=f"{medals[i]} {row['Mean Score']:.3f}",
+                showarrow=False, xanchor='left',
+                font=dict(size=14, color="white"),
+            )
+        else:
+            fig.add_annotation(
+                x=row['Mean Score'] + row['Std Score'] + padding,
+                y=row['Model'],
+                text=f"{row['Mean Score']:.3f}",
+                showarrow=False, xanchor='left',
+                font=dict(size=12, color="rgba(255,255,255,0.7)"),
+            )
+
     fig.update_layout(
-        title=f"Model Comparison ({metric}, walk-forward CV)",
-        xaxis_title=f"Mean {metric} (± std across folds)",
+        title=f"⚔️ AI ใครเก่งสุด? ({metric} — เฉลี่ยจาก walk-forward CV)",
+        xaxis_title=f"{metric} (สูงกว่า = ดีกว่า)",
         yaxis_title="",
-        template="plotly_dark", height=320,
-        margin=dict(l=20, r=80, t=50, b=40)
+        template="plotly_dark", height=380,
+        margin=dict(l=80, r=140, t=70, b=50),  # right margin เผื่อ medal annotation
+        xaxis=dict(range=[min_x - padding * 2, max_x + padding * 6]),  # เผื่อที่ขวา
     )
     return fig
 

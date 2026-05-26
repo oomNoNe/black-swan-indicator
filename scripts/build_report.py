@@ -400,9 +400,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   <div class="simple-list">
     <ul>
+      <li><strong>👶 Naive</strong> = วิธีง่ายที่สุด — "เดาว่าพรุ่งนี้ = วันนี้" (เป็นมาตรฐานเทียบ)</li>
       <li><strong>🌲 XGBoost</strong> = ต้นไม้การตัดสินใจ (ฉลาด ใช้กันมากใน Kaggle)</li>
       <li><strong>💡 LightGBM</strong> = ต้นไม้แบบเร็ว (น้องของ XGBoost)</li>
-      <li><strong>📐 Ridge</strong> = สมการคณิตศาสตร์เรียบง่าย (ไม่ฉลาดเท่า แต่เสถียร)</li>
+      <li><strong>📐 Ridge</strong> = สมการคณิตศาสตร์เรียบง่าย (ไม่ฉลาด แต่เสถียร)</li>
       <li><strong>🧠 LSTM</strong> = สมองเลียนแบบมนุษย์ (Deep Learning)</li>
     </ul>
   </div>
@@ -705,8 +706,10 @@ def build():
     cmp_fig = draw_model_comparison(data['cmp_reg'])
     cmp_chart = fig_to_html(cmp_fig) if cmp_fig else "<p>ไม่มีข้อมูลเปรียบเทียบ</p>"
 
-    best = data['cmp_reg'].iloc[0]
-    worst = data['cmp_reg'].iloc[-1]
+    # ✨ คัด best (R² สูงสุด) vs worst (R² ต่ำสุด)
+    cmp_sorted = data['cmp_reg'].sort_values('Mean Score', ascending=False).reset_index(drop=True)
+    best = cmp_sorted.iloc[0]
+    worst = cmp_sorted.iloc[-1]
 
     compare_winner_loser = f"""
     <div class="compare-grid">
@@ -714,7 +717,7 @@ def build():
             <div class="compare-emoji">🥇</div>
             <div class="compare-name">{best['Model']}</div>
             <div class="compare-num">R² = {best['Mean Score']:.3f}</div>
-            <div class="compare-desc">ผู้ชนะ — แม่นที่สุดในการทำนายครั้งนี้</div>
+            <div class="compare-desc">ผู้ชนะ — แม่นที่สุดในการทดสอบครั้งนี้</div>
         </div>
         <div class="compare-card loser">
             <div class="compare-emoji">🥉</div>
@@ -725,13 +728,34 @@ def build():
     </div>
     """
 
-    speech_compare = speech_bubble(
-        "🤓",
-        f"<strong>เซอร์ไพรส์!</strong> AI เก่งแฟนซีอย่าง LSTM (Deep Learning) "
-        f"กลับ <strong>แพ้</strong> โมเดลง่ายๆ อย่าง Ridge "
-        f"เพราะข้อมูลของเรามีแค่ ~1,200 วัน — น้อยเกินไปสำหรับ AI ใหญ่ๆ "
-        f"<br><br>บทเรียน: <strong>ไม่ใช่ทุกปัญหาต้องใช้ AI ฉลาด</strong> บางทีของง่ายๆ ก็พอ!"
-    )
+    # ===== Honest insight ขึ้นกับว่า Naive ชนะหรือไม่ =====
+    naive_row = data['cmp_reg'][data['cmp_reg']['Model'] == 'Naive']
+    if not naive_row.empty:
+        naive_score = float(naive_row.iloc[0]['Mean Score'])
+        naive_beats_all = best['Model'] == 'Naive'
+    else:
+        naive_score = None
+        naive_beats_all = False
+
+    if naive_beats_all:
+        speech_compare = speech_bubble(
+            "🤯",
+            f"<strong>เซอร์ไพรส์! Naive baseline ชนะทุก AI</strong><br><br>"
+            f"'Naive' คือการเดาง่ายๆ ว่า <em>'VIX อีก 7 วัน = VIX วันนี้'</em> "
+            f"(R² = {naive_score:.3f}) — ไม่ใช้ AI เลย<br><br>"
+            f"แต่กลับชนะ AI ฉลาดทุกตัว (XGBoost, LightGBM, LSTM)<br><br>"
+            f"<strong>🎓 บทเรียนสำคัญ</strong>: นี่คือสิ่งที่นักการเงินเรียกว่า "
+            f"<strong>'Random Walk Hypothesis'</strong> — ตลาดผันผวนแบบสุ่มมาก "
+            f"จน AI ที่ดีที่สุดก็ทำนายไม่ได้ดีกว่า 'พรุ่งนี้ = วันนี้'"
+        )
+    else:
+        speech_compare = speech_bubble(
+            "🤓",
+            f"<strong>{best['Model']}</strong> ชนะใน task นี้ (R² = {best['Mean Score']:.3f}) "
+            f"<br><br>เราใส่ <strong>Naive baseline</strong> (เดาว่า 'VIX อีก 7 วัน = VIX วันนี้') "
+            f"เป็นมาตรฐาน — ถ้าโมเดล ML ไม่ชนะ baseline นี้ = ใช้ไม่ได้<br><br>"
+            f"บทเรียน: <strong>เริ่มจาก baseline ง่ายๆ เสมอ</strong> ก่อนใช้ AI ใหญ่ๆ"
+        )
 
     # ===== SHAP =====
     shap_values, feat_names, X_sample = data['shap']
