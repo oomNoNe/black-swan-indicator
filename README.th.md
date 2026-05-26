@@ -12,6 +12,30 @@
 > 👉 **คลิกแบดจ์เขียวด้านบน** เพื่อดูรายงานสดทันที (ไม่ต้องติดตั้งอะไร)
 
 ระบบเตือนภัยล่วงหน้าสำหรับวิกฤตการเงิน ขับเคลื่อนด้วย AI และ Quant Analysis
+
+---
+
+## 📊 เกี่ยวกับ Live Report
+
+**Live Report** ที่ `oomNoNe.github.io/black-swan-indicator/` เป็น
+**static HTML snapshot ที่สร้างไว้ล่วงหน้า** (ไม่ใช่ web app real-time)
+
+**ทำไมต้อง static?**
+- ⚡ โหลดทันที (< 1 วินาที) — ไม่ต้องรอ AI train
+- 💸 Host ฟรี (GitHub Pages, ไม่ต้องเช่า server)
+- 📱 ใช้งานได้ทุก device, รองรับมือถือ
+
+**Report update เมื่อไหร่?**
+| Trigger | กำหนดการ |
+|---|---|
+| 🕐 Auto cron | ทุกวันจันทร์ 06:00 UTC (= 13:00 ไทย) |
+| 📝 ตอน push code | เมื่อแก้ `engine/`, `data/`, `scripts/`, หรือ `ui/components.py` |
+| 🖱️ Manual | ไป GitHub Actions → กดปุ่ม "Rebuild Live Report" |
+
+**Timestamp "📅 อัพเดทล่าสุด"** ด้านบนของ report จะบอกว่า build ครั้งล่าสุดเมื่อไหร่
+ข้อมูลในรายงานสะท้อนสภาพตลาด ณ เวลานั้น
+
+**อยากได้ข้อมูล real-time แบบ interactive?** รัน Streamlit app ในเครื่อง (วิธีอยู่ด้านล่าง)
 ผสาน **การวิเคราะห์ Sentiment ข่าวด้วย NLP**, **การพยากรณ์ความผันผวนของตลาดด้วย ML**,
 และ **การตรวจจับสภาพตลาด (Regime Detection)** เพื่อสร้าง Crisis Risk Score (0–100)
 พร้อมระบบ Backtest กลยุทธ์การเทรด
