@@ -8,23 +8,23 @@ import numpy as np
 # Interactive time-series helpers (TradingView-style)
 # ==========================================================
 def _add_time_controls(fig):
-    """เพิ่ม Range Slider + Range Selector buttons + spike lines"""
+    """Add Range Slider + Range Selector buttons + spike lines (English-only labels)"""
     fig.update_xaxes(
         rangeslider=dict(visible=True, thickness=0.05, bgcolor="rgba(255,255,255,0.05)"),
         rangeselector=dict(
             buttons=[
-                dict(count=1, label="1ด", step="month", stepmode="backward"),
-                dict(count=3, label="3ด", step="month", stepmode="backward"),
-                dict(count=6, label="6ด", step="month", stepmode="backward"),
+                dict(count=1, label="1M", step="month", stepmode="backward"),
+                dict(count=3, label="3M", step="month", stepmode="backward"),
+                dict(count=6, label="6M", step="month", stepmode="backward"),
                 dict(count=1, label="YTD", step="year", stepmode="todate"),
-                dict(count=1, label="1ปี", step="year", stepmode="backward"),
-                dict(count=3, label="3ปี", step="year", stepmode="backward"),
-                dict(step="all", label="ทั้งหมด"),
+                dict(count=1, label="1Y", step="year", stepmode="backward"),
+                dict(count=3, label="3Y", step="year", stepmode="backward"),
+                dict(step="all", label="All"),
             ],
             bgcolor="rgba(31,119,180,0.15)",
             activecolor="#1f77b4",
             font=dict(color="white", size=11),
-            x=0.0, y=1.12,
+            x=0.0, y=1.06,  # closer to plot, won't collide with title
         ),
         showspikes=True, spikemode="across", spikesnap="cursor",
         spikecolor="#888", spikethickness=1, spikedash="dot",
@@ -90,7 +90,7 @@ def draw_vix_history_chart(df, predicted_vix=None, lookback_days=None, full_hist
     # Historical VIX line
     fig.add_trace(go.Scatter(
         x=recent.index, y=recent['VIX'],
-        mode='lines', name='VIX จริง',
+        mode='lines', name='VIX (actual)',
         line=dict(color='#1f77b4', width=1.5),
         hovertemplate='<b>%{x|%d %b %Y}</b><br>VIX: %{y:.2f}<extra></extra>'
     ))
@@ -99,7 +99,7 @@ def draw_vix_history_chart(df, predicted_vix=None, lookback_days=None, full_hist
     recent_mean = recent['VIX'].rolling(20).mean()
     fig.add_trace(go.Scatter(
         x=recent.index, y=recent_mean,
-        mode='lines', name='เฉลี่ย 20 วัน',
+        mode='lines', name='20-day MA',
         line=dict(color='#FFA15A', width=1.5, dash='dot'),
         hovertemplate='<b>%{x|%d %b %Y}</b><br>MA20: %{y:.2f}<extra></extra>'
     ))
@@ -111,28 +111,28 @@ def draw_vix_history_chart(df, predicted_vix=None, lookback_days=None, full_hist
             x=[recent.index[-1], future_date],
             y=[recent['VIX'].iloc[-1], predicted_vix],
             mode='lines+markers',
-            name='AI ทำนาย 7 วัน',
+            name='AI forecast (7d)',
             line=dict(color='#EF553B', width=2.5, dash='dash'),
             marker=dict(size=14, symbol='star'),
-            hovertemplate='<b>%{x|%d %b %Y}</b><br>คาดการณ์: %{y:.2f}<extra></extra>'
+            hovertemplate='<b>%{x|%d %b %Y}</b><br>Forecast: %{y:.2f}<extra></extra>'
         ))
 
-    # Crisis threshold lines
+    # Crisis threshold lines (English labels — financial standard)
     fig.add_hline(y=20, line_dash="dot", line_color="gray",
-                  annotation_text="ปกติ (20)", annotation_position="right")
+                  annotation_text="Normal (20)", annotation_position="right")
     fig.add_hline(y=30, line_dash="dash", line_color="orange",
-                  annotation_text="ระวัง (30)", annotation_position="right")
+                  annotation_text="Caution (30)", annotation_position="right")
     fig.add_hline(y=40, line_dash="dash", line_color="red",
-                  annotation_text="วิกฤต (40)", annotation_position="right")
+                  annotation_text="Crisis (40)", annotation_position="right")
 
+    # No inner title — section H3 in HTML provides context (avoids overlap with rangeselector)
     fig.update_layout(
-        title="📈 VIX (อุณหภูมิตลาด) + AI ทำนาย",
         xaxis_title=None, yaxis_title="VIX",
         template="plotly_dark", hovermode="x unified",
         height=520,
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01,
                     bgcolor="rgba(0,0,0,0.5)"),
-        margin=dict(t=80, b=80),
+        margin=dict(t=60, b=80),
     )
 
     if full_history:
@@ -174,7 +174,7 @@ def draw_feature_importance(forecaster):
 # BACKTEST: PRICE + SIGNALS
 # ==========================================================
 def draw_backtest_chart(df):
-    """กราฟราคา S&P 500 + จุดสัญญาณวิกฤต — interactive แบบ TradingView"""
+    """S&P 500 with crisis signals — TradingView-style interactive"""
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(
@@ -189,17 +189,16 @@ def draw_backtest_chart(df):
         if not signals.empty:
             fig.add_trace(go.Scatter(
                 x=signals.index, y=signals['Close'],
-                mode='markers', name='🚨 สัญญาณเตือน',
+                mode='markers', name='🚨 Crisis signal',
                 marker=dict(color='red', size=10, symbol='triangle-down',
                             line=dict(color='white', width=1)),
-                hovertemplate='<b>🚨 เตือน: %{x|%d %b %Y}</b><br>ราคา: %{y:,.0f}<extra></extra>'
+                hovertemplate='<b>🚨 %{x|%d %b %Y}</b><br>Price: %{y:,.0f}<extra></extra>'
             ))
 
     fig.update_layout(
-        title="📊 S&P 500 + จุดสัญญาณเตือนวิกฤต",
-        xaxis_title=None, yaxis_title="ราคา",
+        xaxis_title=None, yaxis_title="Price",
         template="plotly_dark", hovermode="x unified",
-        height=520, margin=dict(t=80, b=80),
+        height=520, margin=dict(t=60, b=80),
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01,
                     bgcolor="rgba(0,0,0,0.5)"),
     )
@@ -210,7 +209,7 @@ def draw_backtest_chart(df):
 # BACKTEST: EQUITY CURVE COMPARISON
 # ==========================================================
 def draw_equity_curve_chart(df):
-    """กราฟเปรียบเทียบ cumulative return — interactive"""
+    """Cumulative return comparison — interactive"""
     work = df.dropna(subset=['Market_Return', 'Strategy_Return']).copy()
     work['Cum_BuyHold'] = (1 + work['Market_Return']).cumprod()
     work['Cum_Strategy'] = (1 + work['Strategy_Return']).cumprod()
@@ -218,22 +217,21 @@ def draw_equity_curve_chart(df):
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=work.index, y=work['Cum_BuyHold'],
-        mode='lines', name='📊 ซื้อแล้วถือเฉยๆ',
+        mode='lines', name='📊 Buy & Hold',
         line=dict(color='#888888', width=2),
-        hovertemplate='<b>%{x|%d %b %Y}</b><br>Buy&Hold: %{y:.3f}×<extra></extra>'
+        hovertemplate='<b>%{x|%d %b %Y}</b><br>B&H: %{y:.3f}×<extra></extra>'
     ))
     fig.add_trace(go.Scatter(
         x=work.index, y=work['Cum_Strategy'],
-        mode='lines', name='🛡️ กลยุทธ์เรา',
+        mode='lines', name='🛡️ Black Swan Strategy',
         line=dict(color='#00cc96', width=2),
         hovertemplate='<b>%{x|%d %b %Y}</b><br>Strategy: %{y:.3f}×<extra></extra>'
     ))
 
     fig.update_layout(
-        title="💰 เงินทุนเติบโตยังไง (1 = ทุนเริ่มต้น)",
-        xaxis_title=None, yaxis_title="มูลค่าพอร์ต (เท่า)",
+        xaxis_title=None, yaxis_title="Portfolio value (× initial)",
         template="plotly_dark", hovermode="x unified",
-        height=500, margin=dict(t=80, b=80),
+        height=500, margin=dict(t=60, b=80),
         legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01,
                     bgcolor="rgba(0,0,0,0.5)"),
     )
@@ -244,7 +242,7 @@ def draw_equity_curve_chart(df):
 # BACKTEST: DRAWDOWN COMPARISON
 # ==========================================================
 def draw_drawdown_chart(df):
-    """Drawdown ทั้ง 2 แบบ — interactive"""
+    """Drawdown comparison — interactive"""
     work = df.dropna(subset=['Market_Return', 'Strategy_Return']).copy()
     cum_bh = (1 + work['Market_Return']).cumprod()
     cum_st = (1 + work['Strategy_Return']).cumprod()
@@ -253,23 +251,22 @@ def draw_drawdown_chart(df):
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=work.index, y=dd_bh, mode='lines', name='📊 ซื้อแล้วถือ',
+        x=work.index, y=dd_bh, mode='lines', name='📊 Buy & Hold',
         line=dict(color='#888888', width=1.5), fill='tozeroy',
         fillcolor='rgba(136,136,136,0.2)',
         hovertemplate='<b>%{x|%d %b %Y}</b><br>B&H DD: %{y:.2f}%<extra></extra>'
     ))
     fig.add_trace(go.Scatter(
-        x=work.index, y=dd_st, mode='lines', name='🛡️ กลยุทธ์เรา',
+        x=work.index, y=dd_st, mode='lines', name='🛡️ Black Swan Strategy',
         line=dict(color='#EF553B', width=1.5), fill='tozeroy',
         fillcolor='rgba(239,85,59,0.3)',
         hovertemplate='<b>%{x|%d %b %Y}</b><br>Strategy DD: %{y:.2f}%<extra></extra>'
     ))
 
     fig.update_layout(
-        title="📉 ขาดทุนสะสมสูงสุด (Drawdown)",
         xaxis_title=None, yaxis_title="Drawdown (%)",
         template="plotly_dark", hovermode="x unified",
-        height=420, margin=dict(t=80, b=80),
+        height=420, margin=dict(t=60, b=80),
         legend=dict(yanchor="bottom", y=0.01, xanchor="left", x=0.01,
                     bgcolor="rgba(0,0,0,0.5)"),
     )
@@ -349,7 +346,7 @@ def draw_animated_vix_timeline(df, step_months=3):
                            line=dict(color='#1f77b4', width=2), name='VIX'),
             ],
             layout=go.Layout(
-                title_text=f"📅 VIX ถึง {end_month.strftime('%b %Y')}",
+                title_text=f"📅 VIX through {end_month.strftime('%b %Y')}",
             )
         ))
 
@@ -363,15 +360,15 @@ def draw_animated_vix_timeline(df, step_months=3):
 
     # Threshold lines
     fig.add_hline(y=20, line_dash="dot", line_color="gray",
-                  annotation_text="ปกติ", annotation_position="right")
+                  annotation_text="Normal", annotation_position="right")
     fig.add_hline(y=30, line_dash="dash", line_color="orange",
-                  annotation_text="ระวัง", annotation_position="right")
+                  annotation_text="Caution", annotation_position="right")
     fig.add_hline(y=40, line_dash="dash", line_color="red",
-                  annotation_text="วิกฤต", annotation_position="right")
+                  annotation_text="Crisis", annotation_position="right")
 
     # Play button + slider
     fig.update_layout(
-        title="🎬 VIX Animated Timeline (กดปุ่ม Play)",
+        title="🎬 VIX Animated Timeline (press Play)",
         template="plotly_dark", height=520,
         xaxis=dict(range=[df.index.min(), df.index.max()], title=None),
         yaxis=dict(range=[0, df['VIX'].max() * 1.1], title="VIX"),
@@ -392,7 +389,7 @@ def draw_animated_vix_timeline(df, step_months=3):
         )],
         sliders=[dict(
             active=0, x=0.15, y=-0.15, len=0.8,
-            currentvalue=dict(prefix="เดือน: ", font=dict(size=14)),
+            currentvalue=dict(prefix="Month: ", font=dict(size=14)),
             steps=[dict(method="animate", label=f.name[:7],
                         args=[[f.name], {"frame": {"duration": 0, "redraw": True},
                                          "mode": "immediate"}])
@@ -435,10 +432,10 @@ def draw_3d_volatility(df):
     )])
 
     fig.update_layout(
-        title="🌐 3D View — เวลา × ผลตอบแทน × ความกลัว (หมุนได้ด้วย mouse drag)",
+        title="🌐 3D View — Time × S&P Return × VIX (drag to rotate)",
         template="plotly_dark", height=620,
         scene=dict(
-            xaxis=dict(title='วันที่'),
+            xaxis=dict(title='Date'),
             yaxis=dict(title='S&P 500 Return (%)'),
             zaxis=dict(title='VIX'),
             bgcolor='rgba(14,17,23,1)',
@@ -520,12 +517,12 @@ def draw_model_comparison(comparison_df):
             )
 
     fig.update_layout(
-        title=f"⚔️ AI ใครเก่งสุด? ({metric} — เฉลี่ยจาก walk-forward CV)",
-        xaxis_title=f"{metric} (สูงกว่า = ดีกว่า)",
+        title=f"⚔️ Model Comparison ({metric}, walk-forward CV)",
+        xaxis_title=f"{metric} (higher = better)",
         yaxis_title="",
         template="plotly_dark", height=380,
-        margin=dict(l=80, r=140, t=70, b=50),  # right margin เผื่อ medal annotation
-        xaxis=dict(range=[min_x - padding * 2, max_x + padding * 6]),  # เผื่อที่ขวา
+        margin=dict(l=80, r=140, t=70, b=50),  # right margin for medal annotation
+        xaxis=dict(range=[min_x - padding * 2, max_x + padding * 6]),
     )
     return fig
 
