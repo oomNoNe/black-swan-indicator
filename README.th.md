@@ -343,6 +343,62 @@ docker run -p 8501:8501 black-swan-indicator
 
 ---
 
+## 📚 Data Sources & References (แหล่งข้อมูลและอ้างอิง)
+
+### แหล่งข้อมูล
+
+| Source | ใช้ทำอะไร | การเข้าถึง | หมายเหตุ |
+|---|---|---|---|
+| **Yahoo Finance** (ผ่าน [yfinance](https://github.com/ranaroussi/yfinance)) | S&P 500, VIX, 10Y/3M Treasury, Gold, Oil, DXY, multi-asset | ฟรี (unofficial scraper) | Daily OHLCV, delay ~15 นาที, มี rate limit |
+| **Google News RSS** | พาดหัวข่าวการเงิน (เฉพาะ title) | RSS feed ฟรี | ภาษาอังกฤษเท่านั้น, ~10 ข่าว/query, ไม่มี historical |
+| **Hugging Face Hub** | โมเดล `ProsusAI/finbert` pre-trained | ฟรี (ต้องสมัคร HF) | ~440 MB ดาวน์โหลดครั้งแรก, cache อัตโนมัติ |
+
+### Ticker Symbols ที่ใช้ (yfinance)
+
+```
+^GSPC    — S&P 500 Index           ^VIX    — CBOE Volatility Index
+^TNX     — 10-Year Treasury Yield  ^IRX    — 13-Week T-Bill Yield
+GC=F     — Gold Futures            CL=F    — WTI Crude Oil Futures
+DX-Y.NYB — US Dollar Index (DXY)
+^NDX     — Nasdaq 100              ^VXN    — Nasdaq Volatility
+^RUT     — Russell 2000            ^RVX    — Russell Volatility
+^OVX     — Oil Volatility Index
+EEM      — Emerging Markets ETF    FXI     — China Large-Cap ETF
+EWZ      — Brazil ETF              BTC-USD — Bitcoin / USD
+ETH-USD  — Ethereum / USD
+```
+
+### Academic References (งานวิจัยอ้างอิง)
+
+Methodology ของ project นี้ต่อยอดจากงานวิจัยมาตรฐาน:
+
+- **Random Walk Hypothesis** — Fama, E. (1970). *Efficient Capital Markets:
+  A Review of Theory and Empirical Work*. Journal of Finance, 25(2), 383–417.
+  ผู้ได้รับ Nobel เศรษฐศาสตร์ปี 2013
+- **XGBoost** — Chen, T. & Guestrin, C. (2016). *XGBoost: A Scalable Tree
+  Boosting System*. KDD '16
+- **LightGBM** — Ke, G. et al. (2017). *LightGBM: A Highly Efficient Gradient
+  Boosting Decision Tree*. NIPS '17
+- **SHAP values** — Lundberg, S. M. & Lee, S.-I. (2017). *A Unified Approach to
+  Interpreting Model Predictions*. NIPS '17 (ต่อยอดจาก Shapley 1953, Nobel)
+- **FinBERT** — Araci, D. (2019). *FinBERT: Financial Sentiment Analysis with
+  Pre-trained Language Models*. arXiv:1908.10063
+- **Walk-Forward Validation** — Bergmeir, C. & Benítez, J. M. (2012). *On the
+  use of cross-validation for time series predictor evaluation*. Information Sciences, 191, 192–213
+
+### License & ข้อจำกัด
+
+- **yfinance** เป็น open-source ที่ scrape Yahoo Finance — Yahoo terms of
+  service applies, ห้าม commercial redistribution ของ raw data
+- **Google News** RSS เปิดสาธารณะ ใช้งานตาม terms ของ Google
+- **FinBERT** ออกใต้ MIT-like license บน Hugging Face
+- **ข้อมูล cache** ทั้งหมดใน `.cache/` ถูก gitignore — ephemeral
+- **ไม่การันตี data quality** — yfinance อาจมี missing bars, delay,
+  หรือ rate-limit error บางครั้ง สำหรับ production แนะนำใช้ paid provider
+  เช่น Polygon.io, Refinitiv, Bloomberg
+
+---
+
 ## 📊 เกี่ยวกับ Live Report
 
 Live report เป็น **static HTML snapshot** ที่สร้างไว้ล่วงหน้า (ไม่ใช่ live web app)

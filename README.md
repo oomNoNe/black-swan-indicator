@@ -413,6 +413,63 @@ understand market regimes beyond fundamental ratios.
 
 ---
 
+## 📚 Data Sources & References
+
+### Data Sources
+
+| Source | Used for | Access | Notes |
+|---|---|---|---|
+| **Yahoo Finance** (via [yfinance](https://github.com/ranaroussi/yfinance)) | S&P 500, VIX, 10Y/3M Treasury, Gold, Oil, DXY, multi-asset prices | Free, unofficial scraper | Daily OHLCV, ~15 min delayed; subject to rate limits |
+| **Google News RSS** | Latest financial headlines (titles only, no body) | Public RSS feed | English-only, ~10 headlines/query, no historical archive |
+| **Hugging Face Hub** | Pre-trained `ProsusAI/finbert` model weights | Free with HF account | ~440 MB download, cached locally after first run |
+
+### Ticker Symbols Used (yfinance)
+
+```
+^GSPC    — S&P 500 Index           ^VIX    — CBOE Volatility Index
+^TNX     — 10-Year Treasury Yield  ^IRX    — 13-Week T-Bill Yield
+GC=F     — Gold Futures            CL=F    — WTI Crude Oil Futures
+DX-Y.NYB — US Dollar Index (DXY)
+^NDX     — Nasdaq 100              ^VXN    — Nasdaq Volatility
+^RUT     — Russell 2000            ^RVX    — Russell Volatility
+^OVX     — Oil Volatility Index
+EEM      — Emerging Markets ETF    FXI     — China Large-Cap ETF
+EWZ      — Brazil ETF              BTC-USD — Bitcoin / USD
+ETH-USD  — Ethereum / USD
+```
+
+### Academic References
+
+The methodology draws from established academic work:
+
+- **Random Walk Hypothesis** — Fama, E. (1970). *Efficient Capital Markets:
+  A Review of Theory and Empirical Work*. Journal of Finance, 25(2), 383–417.
+  Nobel Prize in Economics 2013.
+- **XGBoost algorithm** — Chen, T. & Guestrin, C. (2016). *XGBoost: A Scalable
+  Tree Boosting System*. KDD '16.
+- **LightGBM algorithm** — Ke, G. et al. (2017). *LightGBM: A Highly Efficient
+  Gradient Boosting Decision Tree*. NIPS '17.
+- **SHAP values** — Lundberg, S. M. & Lee, S.-I. (2017). *A Unified Approach to
+  Interpreting Model Predictions*. NIPS '17. Built on Shapley (1953) Nobel work.
+- **FinBERT** — Araci, D. (2019). *FinBERT: Financial Sentiment Analysis with
+  Pre-trained Language Models*. arXiv:1908.10063.
+- **Walk-Forward Validation** — Bergmeir, C. & Benítez, J. M. (2012). *On the
+  use of cross-validation for time series predictor evaluation*. Information Sciences, 191, 192–213.
+
+### Data Licensing & Disclaimers
+
+- **yfinance** is an open-source library that scrapes public Yahoo Finance pages.
+  Yahoo's terms of service apply; not for commercial redistribution of raw data.
+- **Google News** RSS feeds are publicly accessible; usage subject to Google's
+  terms.
+- **FinBERT** is released under MIT-like terms on Hugging Face.
+- All cached data in `.cache/` is gitignored and ephemeral.
+- **Data quality is not guaranteed** — yfinance occasionally returns missing
+  bars, delayed quotes, or rate-limited errors. Production systems should use
+  paid providers like Polygon.io, Refinitiv, or Bloomberg.
+
+---
+
 ## 📊 About the Live Report
 
 The live report is a **pre-built static HTML snapshot** (not a live web app).
