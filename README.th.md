@@ -2,7 +2,7 @@
 
 > 🌐 **Languages:** [English](README.md) | **ภาษาไทย**
 
-[![Live Report (TH)](https://img.shields.io/badge/📊_รายงานสด-ภาษาไทย-success?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/)
+[![Live Report (TH)](https://img.shields.io/badge/📊_Live_Report-TH-success?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/)
 [![Live Report (EN)](https://img.shields.io/badge/📊_Live_Report-English-blue?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/index.en.html)
 
 [![CI](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml/badge.svg)](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml)
@@ -25,8 +25,6 @@
   </tr>
 </table>
 
-> 👉 **[เปิด interactive live report →](https://oomnone.github.io/black-swan-indicator/)**
-
 ---
 
 ## นี่คืออะไร?
@@ -40,7 +38,7 @@
 เพื่อให้นักลงทุนเตรียมตัวรับสถานการณ์ตลาดตก เช่น Subprime 2008,
 COVID-2020 หรือ เงินเฟ้อ 2022
 
-🌐 **[ดู Live Report →](https://oomNoNe.github.io/black-swan-indicator/)** · สร้างด้วย Python · MIT License
+สร้างด้วย Python · MIT License
 
 ---
 

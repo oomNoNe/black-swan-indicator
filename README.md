@@ -3,7 +3,7 @@
 > 🌐 **Languages:** **English** | [ภาษาไทย](README.th.md)
 
 [![Live Report (EN)](https://img.shields.io/badge/📊_Live_Report-English-success?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/index.en.html)
-[![Live Report (TH)](https://img.shields.io/badge/📊_รายงานสด-ภาษาไทย-blue?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/)
+[![Live Report (TH)](https://img.shields.io/badge/📊_Live_Report-TH-blue?style=for-the-badge)](https://oomNoNe.github.io/black-swan-indicator/)
 
 [![CI](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml/badge.svg)](https://github.com/oomNoNe/black-swan-indicator/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)
@@ -25,8 +25,6 @@
   </tr>
 </table>
 
-> 👉 **[Open the interactive live report →](https://oomnone.github.io/black-swan-indicator/index.en.html)**
-
 ---
 
 ## What is this?
@@ -40,7 +38,7 @@ The system surfaces when markets are likely to enter a "fear regime" so investor
 can prepare for downside scenarios like the 2008 crisis, COVID-2020 crash, or
 inflation shock of 2022.
 
-🌐 **[View Live Report →](https://oomNoNe.github.io/black-swan-indicator/)** · Built with Python · MIT License
+Built with Python · MIT License
 
 ---
 
