@@ -56,8 +56,8 @@ A multi-layer detection pipeline that fuses **3 independent signals**:
 These feed into a dynamically-weighted **Crisis Equation** that adapts to the
 current market regime (Bull / Panic / Ranging).
 
-When the score crosses **70**, the system can fire a **Discord webhook alert**
-so you can act before headlines catch up.
+When the score crosses **70**, the system flags the day as high-risk on the
+dashboard so you can act before headlines catch up.
 
 ---
 
@@ -101,7 +101,7 @@ Daily / On-demand:
 │     • Crisis Risk Score (0–100) on gauge                    │
 │     • Backtest equity curve + drawdown vs Buy & Hold        │
 │     • Multi-asset volatility comparison                     │
-│     • Discord alert if Score > threshold (configurable)     │
+│     • COVID-19 case study & ML vs Naive baseline finding    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -124,8 +124,6 @@ Daily / On-demand:
 │  ├── ai_model.py            — FinBERT sentiment wrapper          │
 │  ├── regime_detector.py     — Market mood classifier             │
 │  ├── backtester.py          — Sharpe / MDD / transaction cost    │
-│  ├── alerts.py              — Discord webhook                    │
-│  ├── experiment_tracker.py  — MLflow integration                 │
 │  └── disk_cache.py          — joblib + parquet persistence       │
 └────────────────────────────────┬─────────────────────────────────┘
                                  ↓
@@ -357,8 +355,6 @@ black-swan-indicator/
 │   ├── ai_model.py              # FinBERT wrapper
 │   ├── regime_detector.py       # SMA + vol regime classifier
 │   ├── backtester.py            # Quant metrics + transaction cost
-│   ├── alerts.py                # Discord webhook
-│   ├── experiment_tracker.py    # MLflow integration
 │   └── disk_cache.py            # joblib/parquet persistence
 ├── ui/
 │   └── components.py            # Plotly chart factory
@@ -404,8 +400,6 @@ understand market regimes beyond fundamental ratios.
 | **NLP** | HuggingFace Transformers + FinBERT (ProsusAI) |
 | **Viz** | Plotly (interactive + 3D + animated) |
 | **App** | Streamlit |
-| **Tracking** | MLflow (local file store) |
-| **Alerts** | Discord webhook |
 | **CI/CD** | GitHub Actions (pytest + auto-rebuild cron) |
 | **Hosting** | GitHub Pages (static report), Docker, Streamlit Cloud |
 | **Testing** | pytest (16 tests, all passing) |

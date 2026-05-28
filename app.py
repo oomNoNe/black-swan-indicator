@@ -23,10 +23,6 @@ from engine.ml_predictor import (
     walk_forward_validate, compare_models, compute_shap_values,
 )
 from engine.features import build_features
-from engine.alerts import send_alert, test_webhook, get_webhook_url
-from engine.experiment_tracker import (
-    log_walkforward_result, log_model_comparison, get_recent_runs, MLFLOW_AVAILABLE,
-)
 from ui.components import (
     draw_gauge_chart, color_sentiment, draw_backtest_chart,
     draw_vix_history_chart, draw_feature_importance,
@@ -417,7 +413,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🤖 AI Regime & Prediction",
     "📈 Advanced Quant Backtest",
     "🔬 Model Lab (Tier 2)",
-    "🌍 Multi-Asset + Alerts (Tier 3)",
+    "🌍 Multi-Asset Comparison",
 ])
 
 # ==========================================
@@ -997,14 +993,10 @@ with tab4:
 # TAB 5: Multi-Asset + Alerts (Tier 3)
 # ==========================================
 with tab5:
-    st.subheader("🌍 Multi-Asset Risk Monitor + Alert System")
-    st.caption("ขยายจาก S&P 500 ไปยัง crypto, EM equity, commodity + ตั้ง Discord alert")
+    st.subheader("🌍 Multi-Asset Volatility Monitor")
+    st.caption("ขยายจาก S&P 500 ไปยัง crypto, EM equity, commodity")
 
-    # ============================================
-    # Section 1: Multi-Asset Comparison
-    # ============================================
-    st.markdown("### 📊 Section 1: Multi-Asset Volatility Comparison")
-    st.caption("เทียบ realized vol ของ asset class ต่างๆ — ตัวไหนผันผวนสุด?")
+    st.markdown("เทียบ realized volatility ข้าม asset class — ตัวไหนผันผวนสุด?")
 
     selected_assets = st.multiselect(
         "เลือก assets ที่จะเทียบ",
@@ -1073,164 +1065,3 @@ with tab5:
                 )
         else:
             st.warning("ไม่สามารถดึงข้อมูล asset ใดๆ ได้")
-
-    st.divider()
-
-    # ============================================
-    # Section 2: Discord Alert System
-    # ============================================
-    st.markdown("### 🚨 Section 2: Discord Alert System")
-    st.caption("ส่ง notification เมื่อ Crisis Score ทะลุ threshold")
-
-    alert_col1, alert_col2 = st.columns([2, 1])
-
-    with alert_col1:
-        st.markdown("##### ⚙️ การตั้งค่า")
-        webhook_status = "✅ Configured" if get_webhook_url() else "❌ Not configured"
-        st.info(f"Discord Webhook: **{webhook_status}**")
-
-        if not get_webhook_url():
-            with st.expander("📖 วิธีตั้งค่า Discord Webhook (3 นาที)", expanded=True):
-                st.markdown(
-                    """
-                    1. เปิด Discord → เลือก server ของคุณ → คลิกขวาที่ channel → **Edit Channel**
-                    2. ไปที่ **Integrations** → **Webhooks** → **New Webhook**
-                    3. ตั้งชื่อ (เช่น "Black Swan Alert") → กด **Copy Webhook URL**
-                    4. ตั้ง environment variable ในเครื่อง:
-                       ```bash
-                       # Windows (PowerShell)
-                       $env:DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/..."
-
-                       # macOS / Linux
-                       export DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
-                       ```
-                    5. รัน app ใหม่ — refresh หน้านี้
-
-                    > 💡 **Note**: Line Notify ถูก deprecated ในปี 2025 — แนะนำใช้ Discord แทน
-                    """
-                )
-
-        alert_threshold = st.slider(
-            "Alert Threshold (Crisis Score)",
-            min_value=40, max_value=95, value=70, step=5,
-            help="ส่ง alert เมื่อ Crisis Score ≥ threshold นี้"
-        )
-
-        # Manual test webhook
-        test_url_override = st.text_input(
-            "หรือใส่ webhook URL ตรงนี้ (สำหรับ test ครั้งเดียว — ไม่บันทึก)",
-            placeholder="https://discord.com/api/webhooks/...",
-            type="password",
-        )
-
-        if st.button("🧪 Test Webhook", use_container_width=True):
-            url_to_use = test_url_override or get_webhook_url()
-            if url_to_use:
-                with st.spinner("ส่ง test message..."):
-                    result = test_webhook(webhook_url=url_to_use)
-                if result["status"] == "sent":
-                    st.success(f"✅ {result['message']} — เช็คใน Discord ของคุณ")
-                else:
-                    st.error(f"❌ {result['message']}")
-            else:
-                st.warning("⚠️ กรุณาตั้ง DISCORD_WEBHOOK_URL หรือใส่ URL ในช่องด้านบน")
-
-    with alert_col2:
-        st.markdown("##### 📤 ส่ง Live Alert")
-        st.caption("ส่ง alert ด้วยค่า score ปัจจุบัน (ใช้ threshold ด้านซ้าย)")
-
-        # คำนวณ score แบบเดียวกับ Tab 1 (simplified)
-        if current_vix:
-            sample_news_risk = 50.0  # default ถ้าไม่ได้ดึงข่าวใน tab นี้
-            sample_market_risk = min((current_vix / 40.0) * 100, 100.0)
-            live_score = dynamic_risk_equation(sample_news_risk, sample_market_risk, current_regime)
-        else:
-            live_score = 0
-
-        st.metric("Live Score", f"{live_score:.1f}")
-
-        if st.button("🚨 Send Now", use_container_width=True, type="primary"):
-            result = send_alert(
-                score=live_score, vix=current_vix, regime=current_regime,
-                predicted_vix=predicted_vix_top, threshold=alert_threshold,
-            )
-            if result["status"] == "sent":
-                st.success(f"✅ {result['message']}")
-            elif result["status"] == "skipped":
-                st.info(f"⏭️ {result['message']}")
-            else:
-                st.error(f"❌ {result['message']}")
-
-    st.divider()
-
-    # ============================================
-    # Section 3: MLflow Experiment Tracking
-    # ============================================
-    st.markdown("### 📊 Section 3: MLflow Experiment Tracking")
-    st.caption("Log experiments → reproducible + เปรียบเทียบ runs ข้ามเวลา")
-
-    if not MLFLOW_AVAILABLE:
-        st.warning("⚠️ MLflow ไม่ได้ install — รัน `pip install mlflow` ก่อน")
-    else:
-        ml_col1, ml_col2 = st.columns([1, 2])
-
-        with ml_col1:
-            st.markdown("##### 🎯 Log Experiment")
-            log_model = st.selectbox(
-                "Model to log",
-                options=["XGBoost", "LightGBM", "Ridge", "LSTM"],
-                index=0,
-            )
-            log_task = st.radio(
-                "Task",
-                options=["regression", "classification"],
-                horizontal=True,
-            )
-
-            if st.button("📝 Run + Log to MLflow", use_container_width=True):
-                with st.spinner(f"กำลังรัน walk-forward + log..."):
-                    try:
-                        kwargs = {"crash_threshold_pct": crash_threshold} if log_task == "classification" else None
-                        # LSTM ไม่ทำ classification
-                        actual_model = log_model
-                        if log_task == "classification" and log_model == "LSTM":
-                            actual_model = "LogReg"
-                            st.info("LSTM ไม่รองรับ classification — ใช้ LogReg แทน")
-
-                        res = walk_forward_validate(
-                            macro_data, model_name=actual_model, task=log_task,
-                            n_splits=wf_splits, classification_kwargs=kwargs,
-                        )
-                        run_id = log_walkforward_result(res, run_name=f"{actual_model}_{log_task}_manual")
-                        if run_id:
-                            st.success(f"✅ Logged! Run ID: `{run_id[:12]}...`")
-                        else:
-                            st.warning("⚠️ MLflow ไม่ได้ตั้งค่า — รัน `pip install mlflow` ก่อน")
-                        st.caption(f"Mean {res['primary_metric']}: {res['mean_score']:.3f} ± {res['std_score']:.3f}")
-                    except Exception as e:
-                        st.error(f"Failed: {e}")
-
-            st.markdown("---")
-            st.caption(
-                "💻 เปิด MLflow UI:\n```bash\nmlflow ui --backend-store-uri ./mlruns\n```\n"
-                "→ http://localhost:5000"
-            )
-
-        with ml_col2:
-            st.markdown("##### 📜 Recent Runs")
-            runs_df = get_recent_runs(max_results=15)
-            if runs_df is not None and not runs_df.empty:
-                display_cols = []
-                for col in ['tags.mlflow.runName', 'metrics.mean_score', 'metrics.std_score', 'start_time']:
-                    if col in runs_df.columns:
-                        display_cols.append(col)
-
-                if display_cols:
-                    show_df = runs_df[display_cols].copy()
-                    show_df.columns = [c.replace('tags.mlflow.', '').replace('metrics.', '').replace('_', ' ').title()
-                                       for c in show_df.columns]
-                    st.dataframe(show_df, use_container_width=True, hide_index=True)
-                else:
-                    st.info("ยังไม่มี runs — กด 'Run + Log to MLflow' ทางซ้ายเพื่อเริ่ม")
-            else:
-                st.info("ยังไม่มี runs — กด 'Run + Log to MLflow' ทางซ้ายเพื่อเริ่ม")

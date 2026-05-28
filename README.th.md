@@ -56,7 +56,7 @@ Pipeline ตรวจจับ **3 สัญญาณอิสระ** หลอ
 ทั้ง 3 ป้อนเข้า **Crisis Equation** ที่ปรับน้ำหนักตาม **regime ตลาดปัจจุบัน**
 (Bull / Panic / Ranging)
 
-เมื่อ score เกิน **70** ระบบส่ง **Discord webhook alert** ได้ทันที
+เมื่อ score เกิน **70** ระบบจะ flag วันนั้นเป็น high-risk บน dashboard
 เพื่อให้คุณตอบสนองก่อนข่าวจะออก
 
 ---
@@ -101,7 +101,7 @@ Daily / On-demand:
 │     • Crisis Risk Score (0–100) on gauge                    │
 │     • Backtest equity + drawdown vs Buy & Hold              │
 │     • Multi-asset volatility comparison (10 assets)         │
-│     • Discord alert if Score > threshold                    │
+│     • COVID-19 case study & ML vs Naive baseline finding    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -124,8 +124,6 @@ Daily / On-demand:
 │  ├── ai_model.py            — FinBERT wrapper                    │
 │  ├── regime_detector.py     — Market mood classifier             │
 │  ├── backtester.py          — Sharpe / MDD / transaction cost    │
-│  ├── alerts.py              — Discord webhook                    │
-│  ├── experiment_tracker.py  — MLflow                             │
 │  └── disk_cache.py          — joblib + parquet persistence       │
 └────────────────────────────────┬─────────────────────────────────┘
                                  ↓
