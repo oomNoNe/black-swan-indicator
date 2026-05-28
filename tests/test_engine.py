@@ -7,7 +7,10 @@ import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from engine.backtester import calculate_professional_metrics, run_advanced_backtest
+from engine.backtester import (
+    calculate_professional_metrics, run_advanced_backtest,
+    compare_strategies_ttest,
+)
 from engine.regime_detector import classify_market_regime, dynamic_risk_equation
 from engine.ml_predictor import (
     VIXForecaster, CrashClassifier,
@@ -148,6 +151,31 @@ def test_crash_classifier(synthetic_market_data):
 
 
 # ---------- Tier 2: transaction cost in backtest ----------
+# ---------- Tier 2: paired t-test ----------
+def test_ttest_insufficient_sample():
+    res = compare_strategies_ttest(pd.Series([0.01] * 10), pd.Series([0.005] * 10))
+    assert "Insufficient" in res["conclusion"]
+    assert res["reject_h0"] is False
+
+
+def test_ttest_strategy_beats_baseline():
+    np.random.seed(42)
+    baseline = pd.Series(np.random.normal(0.0005, 0.01, 500))
+    # Strategy with small positive edge
+    strategy = baseline + pd.Series(np.random.normal(0.0003, 0.002, 500))
+    res = compare_strategies_ttest(strategy, baseline, alpha=0.05)
+    assert res["t_statistic"] > 0
+    assert 0 <= res["p_value_one_sided"] <= 1
+    assert res["n_observations"] == 500
+
+
+def test_ttest_no_difference():
+    np.random.seed(0)
+    same = pd.Series(np.random.normal(0.0005, 0.01, 500))
+    res = compare_strategies_ttest(same.copy(), same.copy())
+    assert res["reject_h0"] is False
+
+
 def test_backtest_transaction_cost(synthetic_market_data):
     df = synthetic_market_data.copy()
     df["Risk_Signal"] = (df["VIX"] > 18).astype(int)

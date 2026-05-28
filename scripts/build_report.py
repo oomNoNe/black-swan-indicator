@@ -215,6 +215,10 @@ S = {
         "bt_signal_tag": "จุดสามเหลี่ยมแดง = วันที่ rule-based detector ส่งสัญญาณ",
         "bt_win_msg": "🎉 กลยุทธ์ <strong>ชนะ</strong> Buy & Hold! ได้กำไรมากกว่า <strong>{diff:,.0f} บาท</strong> + drawdown ตื้นกว่าในช่วงตลาดตก",
         "bt_lose_msg": "❌ กลยุทธ์ <strong>แพ้</strong> Buy & Hold ในช่วงนี้ — เพราะ {years} ปีที่ผ่านมาตลาดเป็น bull market ระบบป้องกันจึงเสียกำไรจากการอยู่นอกตลาดในช่วง up trend<br><br>กลยุทธ์นี้จะ shine ในช่วงวิกฤตจริง เช่น COVID-2020 หรือ Subprime 2008",
+        "ttest_h3": "🧪 Paired t-test: กลยุทธ์ดีกว่า Baseline อย่างมีนัยสำคัญหรือไม่?",
+        "ttest_tag": "ทดสอบสมมติฐาน H₀: mean(strategy − baseline) ≤ 0 vs H₁: mean(strategy − baseline) > 0 (one-sided) ที่ α = 0.05",
+        "ttest_reject": "✅ <strong>Reject H₀</strong> — กลยุทธ์ดีกว่า baseline อย่างมีนัยสำคัญทางสถิติ (p < α)",
+        "ttest_fail": "⚠️ <strong>Fail to reject H₀</strong> — ไม่มีหลักฐานเพียงพอว่ากลยุทธ์ดีกว่า baseline (p ≥ α) ตรงกับ Random Walk Hypothesis",
 
         # Multi-asset
         "multi_h2": "🌍 Multi-Asset Volatility",
@@ -417,6 +421,10 @@ S = {
         "bt_signal_tag": "Red triangle markers = days the rule-based detector flagged risk",
         "bt_win_msg": "🎉 Strategy <strong>beats</strong> Buy & Hold! Earned <strong>${diff:,.0f}</strong> more + shallower drawdown during sell-offs.",
         "bt_lose_msg": "❌ Strategy <strong>underperforms</strong> Buy & Hold in this window — because the past {years} years were a bull market, defensive systems sacrifice upside by sitting in cash during rallies.<br><br>The strategy's value emerges during actual crises like COVID-2020 or 2008.",
+        "ttest_h3": "🧪 Paired t-test: Is the strategy significantly better than baseline?",
+        "ttest_tag": "Hypothesis test — H₀: mean(strategy − baseline) ≤ 0 vs H₁: mean(strategy − baseline) > 0 (one-sided) at α = 0.05",
+        "ttest_reject": "✅ <strong>Reject H₀</strong> — strategy is statistically significantly better than baseline (p < α)",
+        "ttest_fail": "⚠️ <strong>Fail to reject H₀</strong> — insufficient evidence that strategy beats baseline (p ≥ α). Consistent with the Random Walk Hypothesis.",
 
         # Multi-asset
         "multi_h2": "🌍 Multi-Asset Volatility",
@@ -877,6 +885,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <p class="section-tagline">{bt_signal_tag}</p>
   <div class="chart-wrap">{signal_chart}</div>
   {speech_backtest}
+
+  <h3>{ttest_h3}</h3>
+  <p class="section-tagline">{ttest_tag}</p>
+  {ttest_card}
 </section>
 
 <section>
@@ -1105,6 +1117,27 @@ def build(lang="th"):
         speech_backtest = speech_bubble("💬",
             t["bt_lose_msg"].format(years=YEARS_LOOKBACK))
 
+    # ===== Paired t-test card =====
+    ttest = data['bt_metrics'].get("Statistical_Test", {})
+    if ttest and not pd.isna(ttest.get("t_statistic", np.nan)):
+        verdict = t["ttest_reject"] if ttest["reject_h0"] else t["ttest_fail"]
+        card_color = "#00cc96" if ttest["reject_h0"] else "#FFA15A"
+        ttest_card = f"""
+        <div style="background: linear-gradient(135deg, {card_color}22, {card_color}11); border: 2px solid {card_color}; padding: 20px 24px; border-radius: 12px; margin: 16px 0;">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 14px;">
+            <div><div style="color: #aaa; font-size: 0.85rem;">t-statistic</div><div style="font-size: 1.5rem; font-weight: 700;">{ttest['t_statistic']:.4f}</div></div>
+            <div><div style="color: #aaa; font-size: 0.85rem;">p-value (one-sided)</div><div style="font-size: 1.5rem; font-weight: 700;">{ttest['p_value_one_sided']:.4f}</div></div>
+            <div><div style="color: #aaa; font-size: 0.85rem;">α (significance)</div><div style="font-size: 1.5rem; font-weight: 700;">{ttest['alpha']}</div></div>
+            <div><div style="color: #aaa; font-size: 0.85rem;">n (daily obs)</div><div style="font-size: 1.5rem; font-weight: 700;">{ttest['n_observations']:,}</div></div>
+          </div>
+          <div style="padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 1.05rem;">
+            {verdict}
+          </div>
+        </div>
+        """
+    else:
+        ttest_card = ""
+
     # ---- Multi-asset ----
     if data['assets']:
         fig = go.Figure()
@@ -1153,6 +1186,7 @@ def build(lang="th"):
         speech_animated=speech_animated, speech_threed=speech_threed,
         backtest_cards=backtest_cards, equity_chart=equity_chart,
         dd_chart=dd_chart, signal_chart=signal_chart, speech_backtest=speech_backtest,
+        ttest_card=ttest_card,
         multi_asset_chart=multi_asset_chart, speech_multi_asset=speech_multi_asset,
         final_status=final_status_text, final_forecast_text=final_forecast_text,
         tech_vix=f"{vix:.2f}",

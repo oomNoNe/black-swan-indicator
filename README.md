@@ -233,8 +233,11 @@ risk-adjusted basis?*
   value of crash-avoidance only shows during actual crises (insufficient
   sample size for formal test).
 
+**Implemented**: Paired t-test on daily returns (strategy vs Buy & Hold,
+one-sided at α = 0.05) — see results in the live report's backtest section.
+
 **Future statistical work**: Diebold-Mariano test for forecast accuracy,
-bootstrap CI for Sharpe difference, paired t-test on daily returns.
+bootstrap CI for Sharpe difference.
 
 </details>
 

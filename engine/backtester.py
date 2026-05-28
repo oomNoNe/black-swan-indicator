@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from scipy import stats
 
 
 def calculate_professional_metrics(returns):
@@ -86,6 +87,16 @@ def run_advanced_backtest(df, transaction_cost_bps=0.0):
         days_in_market = int(df['Position'].sum())
         days_in_cash = len(df) - days_in_market
 
+        # ----------------------------------------------------------
+        # Paired t-test: Strategy vs Buy & Hold
+        # ----------------------------------------------------------
+        # H0: mean(strategy_return - market_return) = 0
+        # H1: mean(strategy_return - market_return) > 0
+        # alpha = 0.05 (one-sided)
+        ttest_result = compare_strategies_ttest(
+            df_clean['Strategy_Return'], df_clean['Market_Return']
+        )
+
         return {
             "Black_Swan_Strategy": strategy_metrics,
             "Baseline_Buy_Hold": baseline_metrics,
@@ -95,8 +106,72 @@ def run_advanced_backtest(df, transaction_cost_bps=0.0):
                 "Days in Market": days_in_market,
                 "Days in Cash": days_in_cash,
                 "Transaction Cost (bps)": transaction_cost_bps,
-            }
+            },
+            "Statistical_Test": ttest_result,
         }
     except Exception as e:
         print(f"[Backtester Error] Failed to calculate metrics: {e}")
         return None
+
+
+def compare_strategies_ttest(strategy_returns, baseline_returns, alpha=0.05):
+    """
+    Paired t-test เปรียบเทียบ strategy vs baseline บน daily returns
+
+    H₀: mean(strategy - baseline) ≤ 0  (strategy ไม่ดีกว่า baseline)
+    H₁: mean(strategy - baseline) > 0  (strategy ดีกว่า baseline)
+
+    ใช้ paired (related samples) เพราะ daily returns ของทั้ง 2 มา
+    จากตลาดเดียวกัน วันเดียวกัน → ไม่ independent
+
+    Args:
+        strategy_returns: pd.Series ของ daily returns กลยุทธ์
+        baseline_returns: pd.Series ของ daily returns benchmark
+        alpha: significance level (default 0.05)
+
+    Returns:
+        dict with t_statistic, p_value, conclusion, mean_diff, n_observations
+    """
+    s = pd.Series(strategy_returns).dropna()
+    b = pd.Series(baseline_returns).dropna()
+    aligned = pd.concat([s, b], axis=1, join='inner').dropna()
+    aligned.columns = ['strategy', 'baseline']
+
+    if len(aligned) < 30:
+        return {
+            "t_statistic": np.nan,
+            "p_value_one_sided": np.nan,
+            "alpha": alpha,
+            "reject_h0": False,
+            "conclusion": "Insufficient sample size (n < 30)",
+            "mean_diff_daily_pct": np.nan,
+            "n_observations": len(aligned),
+        }
+
+    diffs = aligned['strategy'] - aligned['baseline']
+
+    # scipy.stats.ttest_rel: two-sided by default. We do one-sided manually.
+    t_stat, p_two_sided = stats.ttest_rel(aligned['strategy'], aligned['baseline'])
+    # One-sided p-value (alternative: strategy > baseline)
+    if t_stat > 0:
+        p_one_sided = p_two_sided / 2
+    else:
+        p_one_sided = 1 - (p_two_sided / 2)
+
+    reject_h0 = bool(p_one_sided < alpha)
+    if reject_h0:
+        conclusion = (f"Reject H₀ at α={alpha}: strategy returns are "
+                      f"statistically significantly higher than baseline.")
+    else:
+        conclusion = (f"Fail to reject H₀ at α={alpha}: no statistically "
+                      f"significant evidence that strategy beats baseline.")
+
+    return {
+        "t_statistic": float(round(t_stat, 4)),
+        "p_value_one_sided": float(round(p_one_sided, 4)),
+        "alpha": alpha,
+        "reject_h0": reject_h0,
+        "conclusion": conclusion,
+        "mean_diff_daily_pct": float(round(diffs.mean() * 100, 4)),
+        "n_observations": int(len(aligned)),
+    }

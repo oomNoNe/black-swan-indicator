@@ -232,8 +232,11 @@ Buy & Hold หรือไม่?*
 - ⚠️ **ในตลาด bull, กลยุทธ์ defensive แพ้ Buy & Hold** —
   คุณค่าของ crash-avoidance ปรากฏเฉพาะช่วงวิกฤตจริง
 
+**Implemented**: Paired t-test บน daily returns (strategy vs Buy & Hold,
+one-sided ที่ α = 0.05) — ดูผลใน backtest section ของ live report
+
 **Future statistical work**: Diebold-Mariano test สำหรับ forecast accuracy,
-bootstrap CI สำหรับ Sharpe difference, paired t-test บน daily returns
+bootstrap CI สำหรับ Sharpe difference
 
 </details>
 
