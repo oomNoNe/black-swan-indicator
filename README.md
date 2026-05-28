@@ -12,6 +12,23 @@
 
 ---
 
+## 📸 Preview
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/hero.png" alt="Today's Market Snapshot — Hero KPIs"></td>
+    <td width="50%"><img src="docs/screenshots/vix-forecast.png" alt="VIX history with AI 7-day forecast"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/model-comparison.png" alt="Model Comparison — Naive baseline beats every ML model"></td>
+    <td width="50%"><img src="docs/screenshots/backtest.png" alt="Backtest — Black Swan Strategy vs Buy & Hold"></td>
+  </tr>
+</table>
+
+> 👉 **[Open the interactive live report →](https://oomnone.github.io/black-swan-indicator/index.en.html)**
+
+---
+
 ## What is this?
 
 **Black Swan Risk Indicator** is an early-warning system for financial market crises.

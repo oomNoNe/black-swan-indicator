@@ -12,6 +12,23 @@
 
 ---
 
+## 📸 Preview
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/hero.png" alt="สรุปสภาพตลาดวันนี้"></td>
+    <td width="50%"><img src="docs/screenshots/vix-forecast.png" alt="VIX history + AI ทำนาย 7 วัน"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/model-comparison.png" alt="เปรียบเทียบโมเดล — Naive baseline ชนะทุก ML model"></td>
+    <td width="50%"><img src="docs/screenshots/backtest.png" alt="Backtest — Black Swan Strategy vs Buy & Hold"></td>
+  </tr>
+</table>
+
+> 👉 **[เปิด interactive live report →](https://oomnone.github.io/black-swan-indicator/)**
+
+---
+
 ## นี่คืออะไร?
 
 **Black Swan Risk Indicator** คือระบบเตือนภัยล่วงหน้าก่อนวิกฤตการเงิน
